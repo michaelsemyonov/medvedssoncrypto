@@ -1,0 +1,10 @@
+node_modules
+.pnpm-store
+.next
+coverage
+dist
+.DS_Store
+.env
+*.log
+apps/pwa/.next
+apps/pwa/out

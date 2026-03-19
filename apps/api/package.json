@@ -1,0 +1,21 @@
+{
+  "name": "@medvedsson/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --experimental-strip-types src/server.ts",
+    "start": "node --experimental-strip-types src/server.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@medvedsson/core": "workspace:*",
+    "@medvedsson/db": "workspace:*",
+    "@medvedsson/market-data": "workspace:*",
+    "@medvedsson/notifications": "workspace:*",
+    "@medvedsson/shared": "workspace:*",
+    "dotenv": "^17.2.2",
+    "fastify": "^5.6.0",
+    "pino": "^9.9.0"
+  }
+}

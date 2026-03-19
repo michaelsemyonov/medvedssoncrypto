@@ -1,0 +1,18 @@
+{
+  "name": "@medvedsson/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@medvedsson/db": "workspace:*",
+    "@medvedsson/execution": "workspace:*",
+    "@medvedsson/market-data": "workspace:*",
+    "@medvedsson/notifications": "workspace:*",
+    "@medvedsson/shared": "workspace:*",
+    "@medvedsson/strategy": "workspace:*",
+    "prom-client": "^15.1.3"
+  }
+}

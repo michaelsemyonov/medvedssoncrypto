@@ -1,0 +1,14 @@
+{
+  "name": "@medvedsson/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@medvedsson/execution": "workspace:*",
+    "@medvedsson/shared": "workspace:*",
+    "mysql2": "^3.15.2"
+  }
+}
