@@ -48,6 +48,8 @@ crypto-dryrun-platform/
 
 ## Quick start
 
+Runtime requirement: Node `22.x` and pnpm `10.x`.
+
 1. Create `.env` from `.env.example`.
 2. Start MySQL locally or with Docker Compose.
 3. Install dependencies:

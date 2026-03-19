@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": "22.x",
+    "pnpm": "10.x"
+  },
   "type": "module",
   "scripts": {
     "dev": "pnpm --parallel --filter @medvedsson/api --filter @medvedsson/pwa dev",

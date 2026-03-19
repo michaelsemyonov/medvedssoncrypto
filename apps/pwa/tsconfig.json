@@ -7,7 +7,9 @@
         "name": "next"
       }
     ],
-    "incremental": true
+    "incremental": true,
+    "allowJs": true,
+    "noEmit": true
   },
   "include": [
     "next-env.d.ts",
@@ -15,5 +17,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }
