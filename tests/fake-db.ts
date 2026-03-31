@@ -151,23 +151,26 @@ export class FakeMedvedssonDatabase {
     return [...this.runs].sort((left, right) => right.created_at.getTime() - left.created_at.getTime());
   }
 
-  async startRun(config: AppConfig): Promise<RunRow> {
-    const current = await this.getActiveRun();
-
-    if (current) {
-      return current;
-    }
-
-    const now = new Date();
+  async createRun(params: {
+    name: string;
+    strategyKey: string;
+    version: string;
+    timeframe: string;
+    status?: string;
+    dryRun?: boolean;
+    baseCurrency?: string;
+    startedAt?: string | Date;
+  }): Promise<RunRow> {
+    const now = params.startedAt ? new Date(params.startedAt) : new Date();
     const run: RunRow = {
       id: randomUUID(),
-      name: `${config.strategyKey}-${config.strategyVersion}-${now.toISOString()}`,
-      strategy_key: config.strategyKey,
-      version: config.strategyVersion,
-      timeframe: config.timeframe,
-      status: 'RUNNING',
-      dry_run: true,
-      base_currency: 'USDT',
+      name: params.name,
+      strategy_key: params.strategyKey,
+      version: params.version,
+      timeframe: params.timeframe,
+      status: params.status ?? 'RUNNING',
+      dry_run: params.dryRun ?? true,
+      base_currency: params.baseCurrency ?? 'USDT',
       started_at: now,
       stopped_at: null,
       created_at: now,
@@ -176,6 +179,21 @@ export class FakeMedvedssonDatabase {
 
     this.runs.push(run);
     return run;
+  }
+
+  async startRun(config: AppConfig): Promise<RunRow> {
+    const current = await this.getActiveRun();
+
+    if (current) {
+      return current;
+    }
+
+    return this.createRun({
+      name: `${config.strategyKey}-${config.strategyVersion}-${new Date().toISOString()}`,
+      strategyKey: config.strategyKey,
+      version: config.strategyVersion,
+      timeframe: config.timeframe
+    });
   }
 
   async stopRun(runId: string): Promise<void> {
@@ -256,6 +274,34 @@ export class FakeMedvedssonDatabase {
       .filter((item) => item.exchange === exchange && item.symbol === symbol && item.timeframe === timeframe)
       .sort((left, right) => left.closeTime.localeCompare(right.closeTime))
       .slice(-limit);
+  }
+
+  async getCandlesInRange(params: {
+    exchange: string;
+    symbol: string;
+    timeframe: string;
+    startTime?: string | null;
+    endTime?: string | null;
+  }): Promise<Candle[]> {
+    return this.candles
+      .filter((item) => {
+        if (item.exchange !== params.exchange || item.symbol !== params.symbol || item.timeframe !== params.timeframe) {
+          return false;
+        }
+
+        const closeTimeMs = new Date(item.closeTime).getTime();
+
+        if (params.startTime && closeTimeMs < new Date(params.startTime).getTime()) {
+          return false;
+        }
+
+        if (params.endTime && closeTimeMs > new Date(params.endTime).getTime()) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((left, right) => left.closeTime.localeCompare(right.closeTime));
   }
 
   async getLastProcessedCloseTime(runId: string, symbolId: string): Promise<string | null> {
@@ -533,7 +579,11 @@ export class FakeMedvedssonDatabase {
       return;
     }
 
-    const positionId = String(order.meta.position_id ?? order.position_id ?? '');
+    const rawPositionId = order.meta.position_id ?? order.position_id;
+    const positionId =
+      typeof rawPositionId === 'string' || typeof rawPositionId === 'number'
+        ? String(rawPositionId)
+        : '';
     const position = this.positions.find((item) => item.id === positionId);
 
     if (!position || position.status !== 'OPEN') {

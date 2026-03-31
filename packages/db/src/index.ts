@@ -139,6 +139,10 @@ const parseDate = (value: unknown): Date | null => {
     return value;
   }
 
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error('Unable to parse date value.');
+  }
+
   const text = String(value);
 
   if (text.endsWith('Z')) {
@@ -354,6 +358,10 @@ export class MedvedssonDatabase {
     await this.pool.end();
   }
 
+  async ping(): Promise<void> {
+    await query<MysqlRow>(this.pool, 'SELECT 1 AS ok');
+  }
+
   async getActiveRun(): Promise<RunRow | null> {
     const rows = await query<MysqlRow>(
       this.pool,
@@ -377,6 +385,42 @@ export class MedvedssonDatabase {
     return rows.map(normalizeRunRow);
   }
 
+  async createRun(params: {
+    name: string;
+    strategyKey: string;
+    version: string;
+    timeframe: string;
+    status?: string;
+    dryRun?: boolean;
+    baseCurrency?: string;
+    startedAt?: string | Date;
+  }): Promise<RunRow> {
+    const now = params.startedAt ? new Date(params.startedAt) : new Date();
+    const id = randomUUID();
+
+    await execute(
+      this.pool,
+      `INSERT INTO strategy_runs (
+         id, name, strategy_key, version, timeframe, status, dry_run, base_currency, started_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        params.name,
+        params.strategyKey,
+        params.version,
+        params.timeframe,
+        params.status ?? 'RUNNING',
+        params.dryRun ?? true,
+        params.baseCurrency ?? 'USDT',
+        toMysqlDateTime(now)
+      ]
+    );
+
+    const rows = await query<MysqlRow>(this.pool, 'SELECT * FROM strategy_runs WHERE id = ? LIMIT 1', [id]);
+    return normalizeRunRow(rows[0]!);
+  }
+
   async startRun(config: AppConfig): Promise<RunRow> {
     const current = await this.getActiveRun();
 
@@ -384,21 +428,12 @@ export class MedvedssonDatabase {
       return current;
     }
 
-    const now = new Date();
-    const id = randomUUID();
-    const name = `${config.strategyKey}-${config.strategyVersion}-${now.toISOString()}`;
-
-    await execute(
-      this.pool,
-      `INSERT INTO strategy_runs (
-         id, name, strategy_key, version, timeframe, status, dry_run, base_currency, started_at
-       )
-       VALUES (?, ?, ?, ?, ?, 'RUNNING', TRUE, 'USDT', ?)`,
-      [id, name, config.strategyKey, config.strategyVersion, config.timeframe, toMysqlDateTime(now)]
-    );
-
-    const rows = await query<MysqlRow>(this.pool, 'SELECT * FROM strategy_runs WHERE id = ? LIMIT 1', [id]);
-    return normalizeRunRow(rows[0]!);
+    return this.createRun({
+      name: `${config.strategyKey}-${config.strategyVersion}-${new Date().toISOString()}`,
+      strategyKey: config.strategyKey,
+      version: config.strategyVersion,
+      timeframe: config.timeframe
+    });
   }
 
   async stopRun(runId: string): Promise<void> {
@@ -499,6 +534,50 @@ export class MedvedssonDatabase {
     );
 
     return rows.reverse().map((row) => ({
+      exchange: String(row.exchange),
+      symbol: String(row.symbol),
+      timeframe: String(row.timeframe) as Candle['timeframe'],
+      openTime: parseDate(row.open_time)!.toISOString(),
+      closeTime: parseDate(row.close_time)!.toISOString(),
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+      volume: Number(row.volume),
+      source: String(row.source)
+    }));
+  }
+
+  async getCandlesInRange(params: {
+    exchange: string;
+    symbol: string;
+    timeframe: string;
+    startTime?: string | null;
+    endTime?: string | null;
+  }): Promise<Candle[]> {
+    const clauses = ['exchange = ?', 'symbol = ?', 'timeframe = ?'];
+    const values: unknown[] = [params.exchange, normalizeSymbol(params.symbol), params.timeframe];
+
+    if (params.startTime) {
+      clauses.push('close_time >= ?');
+      values.push(toMysqlDateTime(params.startTime));
+    }
+
+    if (params.endTime) {
+      clauses.push('close_time <= ?');
+      values.push(toMysqlDateTime(params.endTime));
+    }
+
+    const rows = await query<MysqlRow>(
+      this.pool,
+      `SELECT exchange, symbol, timeframe, open_time, close_time, open, high, low, close, volume, source
+       FROM market_candles
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY close_time ASC`,
+      values
+    );
+
+    return rows.map((row) => ({
       exchange: String(row.exchange),
       symbol: String(row.symbol),
       timeframe: String(row.timeframe) as Candle['timeframe'],
@@ -908,7 +987,11 @@ export class MedvedssonDatabase {
         return;
       }
 
-      const positionId = String(order.meta.position_id ?? order.position_id ?? '');
+      const rawPositionId = order.meta.position_id ?? order.position_id;
+      const positionId =
+        typeof rawPositionId === 'string' || typeof rawPositionId === 'number'
+          ? String(rawPositionId)
+          : '';
 
       if (!positionId) {
         throw new Error(`Exit order ${order.id} is missing a position reference.`);
@@ -985,7 +1068,7 @@ export class MedvedssonDatabase {
       [params.equityUsdt, params.runId]
     );
 
-    const peak = Number(peaks[0]?.peak ?? params.equityUsdt);
+    const peak = Math.max(Number(peaks[0]?.peak ?? params.equityUsdt), params.equityUsdt);
     const drawdownPct = peak === 0 ? 0 : round(((peak - params.equityUsdt) / peak) * 100, 8);
 
     await execute(
@@ -1028,19 +1111,19 @@ export class MedvedssonDatabase {
     return Number(rows[0]?.total ?? 0);
   }
 
-  async getRecentSignals(limit = 100): Promise<SignalRow[]> {
+  async getRecentSignals(limit = 100, offset = 0): Promise<SignalRow[]> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT * FROM signals
        ORDER BY candle_close_time DESC, created_at DESC
-       LIMIT ?`,
-      [limit]
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
 
     return rows.map(normalizeSignalRow);
   }
 
-  async getRecentTrades(limit = 100): Promise<Array<PositionRow & { symbol: string }>> {
+  async getRecentTrades(limit = 100, offset = 0): Promise<Array<PositionRow & { symbol: string }>> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT p.*, s.symbol
@@ -1048,8 +1131,8 @@ export class MedvedssonDatabase {
        INNER JOIN symbols s ON s.id = p.symbol_id
        WHERE p.status = 'CLOSED'
        ORDER BY p.exit_time DESC
-       LIMIT ?`,
-      [limit]
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
 
     return rows.map((row) => ({
@@ -1152,23 +1235,24 @@ export class MedvedssonDatabase {
   async getPushSubscriptionsForEvent(symbol: string, eventType: string): Promise<PushSubscriptionRow[]> {
     const rows = await query<MysqlRow>(
       this.pool,
-      `SELECT * FROM push_subscriptions WHERE enabled = TRUE`
+      `SELECT *
+       FROM push_subscriptions
+       WHERE enabled = TRUE
+         AND (
+           symbol_filters IS NULL
+           OR JSON_LENGTH(symbol_filters) = 0
+           OR JSON_CONTAINS(symbol_filters, JSON_QUOTE(?))
+           OR JSON_CONTAINS(symbol_filters, JSON_QUOTE('*'))
+         )
+         AND (
+           event_filters IS NULL
+           OR JSON_LENGTH(event_filters) = 0
+           OR JSON_CONTAINS(event_filters, JSON_QUOTE(?))
+         )`,
+      [symbol, eventType]
     );
 
-    return rows
-      .map(normalizePushSubscriptionRow)
-      .filter((subscription) => {
-        const symbolMatch =
-          subscription.symbol_filters === null ||
-          subscription.symbol_filters.length === 0 ||
-          subscription.symbol_filters.includes(symbol);
-        const eventMatch =
-          subscription.event_filters === null ||
-          subscription.event_filters.length === 0 ||
-          subscription.event_filters.includes(eventType);
-
-        return symbolMatch && eventMatch;
-      });
+    return rows.map(normalizePushSubscriptionRow);
   }
 
   private async getLatestClose(symbol: string): Promise<number | null> {

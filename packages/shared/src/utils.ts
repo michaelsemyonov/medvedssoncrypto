@@ -3,7 +3,7 @@ import { ORDER_INTENTS, ORDER_SIDES, POSITION_SIDES, SIGNAL_TYPES } from './type
 
 export const timeframeToMs = (timeframe: Timeframe): number => {
   if (timeframe !== '5m') {
-    throw new Error(`Unsupported timeframe: ${timeframe}`);
+    throw new Error('Unsupported timeframe.');
   }
 
   return 5 * 60 * 1000;
@@ -27,6 +27,11 @@ export const normalizeSymbol = (symbol: string): string => {
   }
 
   const [base, quote] = cleaned.split('/');
+
+  if (!base || !quote) {
+    throw new Error(`Unable to normalize symbol: ${symbol}`);
+  }
+
   return `${base}/${quote}`;
 };
 

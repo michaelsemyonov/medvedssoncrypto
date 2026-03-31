@@ -14,10 +14,17 @@ export class NotificationService {
   private readonly db: MedvedssonDatabase;
   private readonly logger: LoggerLike;
   private readonly enabled: boolean;
+  private readonly onDeliveryFailure: () => void;
 
-  constructor(config: AppConfig, db: MedvedssonDatabase, logger: LoggerLike) {
+  constructor(
+    config: AppConfig,
+    db: MedvedssonDatabase,
+    logger: LoggerLike,
+    onDeliveryFailure: () => void = () => undefined
+  ) {
     this.db = db;
     this.logger = logger;
+    this.onDeliveryFailure = onDeliveryFailure;
     this.enabled =
       Boolean(config.webPushVapidPublicKey) &&
       Boolean(config.webPushVapidPrivateKey) &&
@@ -32,7 +39,11 @@ export class NotificationService {
     }
   }
 
-  private getEventType(signalType: SignalType): PushEventType {
+  private getEventType(signalType: SignalType, approved: boolean): PushEventType {
+    if (!approved) {
+      return 'risk_rejection';
+    }
+
     if (signalType === 'LONG_ENTRY' || signalType === 'SHORT_ENTRY') {
       return 'entry';
     }
@@ -57,7 +68,7 @@ export class NotificationService {
       return;
     }
 
-    const eventType = this.getEventType(params.signalType);
+    const eventType = this.getEventType(params.signalType, params.approved);
     const subscriptions = await this.db.getPushSubscriptionsForEvent(params.symbol, eventType);
 
     if (subscriptions.length === 0) {
@@ -95,6 +106,7 @@ export class NotificationService {
             payload
           );
         } catch (error) {
+          this.onDeliveryFailure();
           this.logger.error({ error, endpoint: subscription.endpoint }, 'Push delivery failed.');
 
           const statusCode = Number((error as { statusCode?: number })?.statusCode ?? 0);
@@ -134,6 +146,7 @@ export class NotificationService {
             })
           );
         } catch (error) {
+          this.onDeliveryFailure();
           this.logger.error({ error }, 'Runner error notification failed.');
         }
       })

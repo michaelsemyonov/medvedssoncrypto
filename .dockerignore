@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+.pnpm-store
+.next
+coverage
+dist
+.env
+.DS_Store
+Archive.zip

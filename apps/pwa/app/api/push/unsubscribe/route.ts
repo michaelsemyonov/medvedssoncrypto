@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json();
+  const body: unknown = await request.json();
   const response = await fetch(`${getApiBaseUrl()}/push/unsubscribe`, {
     method: 'POST',
     headers: {

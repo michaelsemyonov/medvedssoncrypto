@@ -85,6 +85,12 @@ export const dbWriteErrorsCounter = new Counter({
   registers: [metricsRegistry]
 });
 
+export const runnerErrorsCounter = new Counter({
+  name: 'medvedsson_runner_errors_total',
+  help: 'Runner tick failures.',
+  registers: [metricsRegistry]
+});
+
 export const notificationFailuresCounter = new Counter({
   name: 'medvedsson_notification_failures_total',
   help: 'Notification delivery failures.',

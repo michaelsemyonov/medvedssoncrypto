@@ -11,6 +11,7 @@ describe('simulation engine', () => {
       100,
       {
         fillModel: 'next_open',
+        positionSizingMode: 'fixed_usdt',
         feeRate: 0.001,
         slippageBps: 5,
         fixedUsdtPerTrade: 100,

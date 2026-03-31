@@ -1,6 +1,10 @@
 import type { MedvedssonDatabase } from '@medvedsson/db';
-import { buildPendingOrder, evaluateRisk } from '@medvedsson/execution';
-import { MarketDataAdapter } from '@medvedsson/market-data';
+import {
+  DryRunExecutionAdapter,
+  type ExecutionAdapter,
+  evaluateRisk
+} from '@medvedsson/execution';
+import { analyzeCandleSeries, MarketDataAdapter, mergeCandles } from '@medvedsson/market-data';
 import type { NotificationService } from '@medvedsson/notifications';
 import type { AppConfig, Candle } from '@medvedsson/shared';
 import { round, timeframeToMs } from '@medvedsson/shared';
@@ -16,6 +20,7 @@ import {
   metricsRegistry,
   openPositionsGauge,
   realizedPnlGauge,
+  runnerErrorsCounter,
   signalDecisionCounter,
   signalsCreatedCounter,
   simulatedOrdersCounter,
@@ -36,12 +41,33 @@ type RunnerStatus = {
   lastError: string | null;
 };
 
+const isDatabaseError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const candidate = error as Error & {
+    code?: string;
+    errno?: number;
+    sqlState?: string;
+    sqlMessage?: string;
+  };
+
+  return Boolean(
+    candidate.errno !== undefined ||
+      candidate.sqlState ||
+      candidate.sqlMessage ||
+      candidate.code?.startsWith('ER_')
+  );
+};
+
 export class TradingRunner {
   private readonly config: AppConfig;
   private readonly db: MedvedssonDatabase;
   private readonly marketData: MarketDataAdapter;
   private readonly notifications: NotificationService;
   private readonly logger: LoggerLike;
+  private readonly executionAdapter: ExecutionAdapter;
   private timeoutHandle: NodeJS.Timeout | null = null;
   private running = false;
   private activeRunId: string | null = null;
@@ -55,12 +81,15 @@ export class TradingRunner {
     marketData: MarketDataAdapter;
     notifications: NotificationService;
     logger: LoggerLike;
+    executionAdapter?: ExecutionAdapter;
   }) {
     this.config = params.config;
     this.db = params.db;
     this.marketData = params.marketData;
     this.notifications = params.notifications;
     this.logger = params.logger;
+    this.executionAdapter =
+      params.executionAdapter ?? new DryRunExecutionAdapter(params.db, params.config.execution);
   }
 
   async init(): Promise<void> {
@@ -156,11 +185,12 @@ export class TradingRunner {
   }
 
   private async processPendingOrders(runId: string, symbolId: string, candle: Candle): Promise<void> {
-    const pendingOrders = await this.db.getPendingOrdersForOpenTime(runId, symbolId, candle.openTime);
-
-    for (const order of pendingOrders) {
-      await this.db.fillPendingOrder(order.id, candle.open, candle.openTime);
-    }
+    await this.executionAdapter.processPendingFills({
+      runId,
+      symbolId,
+      openPrice: candle.open,
+      openTime: candle.openTime
+    });
   }
 
   private async processCandle(runId: string, symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number], candle: Candle, history: Candle[]): Promise<void> {
@@ -217,36 +247,20 @@ export class TradingRunner {
     });
 
     if (decision.approved && signal.signalType !== 'NO_SIGNAL') {
-      const orderDraft = buildPendingOrder(
-        signal.signalType,
-        candle.close,
-        this.config.execution,
-        candle.closeTime,
-        openPosition
-      );
-
-      const order = await this.db.createPendingOrder({
+      const executionResult = await this.executionAdapter.handleApprovedSignal({
         runId,
         signalId: signalRow.id,
         symbolId: symbol.id,
-        orderType: 'MARKET',
-        side: orderDraft.side,
-        intent: orderDraft.intent,
-        referencePrice: orderDraft.referencePrice,
-        qty: orderDraft.qty,
-        notionalUsdt: orderDraft.notionalUsdt,
-        slippageBps: orderDraft.slippageBps,
-        feeRate: orderDraft.feeRate,
-        feeAmount: orderDraft.feeAmount,
-        fillModel: orderDraft.fillModel,
-        positionId: openPosition?.id ?? null,
-        meta: orderDraft.meta
+        signalType: signal.signalType,
+        referencePrice: candle.close,
+        scheduledForOpenTime: candle.closeTime,
+        openPosition
       });
 
-      if (order) {
+      if (executionResult.orderCreated && executionResult.intent) {
         simulatedOrdersCounter.inc({
           symbol: symbol.symbol,
-          intent: order.intent
+          intent: executionResult.intent
         });
       }
 
@@ -286,17 +300,59 @@ export class TradingRunner {
   }
 
   private async processSymbol(runId: string, symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number]): Promise<void> {
+    const historyLimit = Math.max(this.config.signal.n + this.config.signal.hBars + 8, 192);
+    const cachedCandles = this.config.enableCandleStorage
+      ? await this.db.getRecentCandles(this.config.exchange, symbol.symbol, this.config.timeframe, historyLimit)
+      : [];
+    let exchangeCandles: Candle[] = [];
+    let usedCacheFallback = false;
     const startedAt = Date.now();
-    const candles = await this.marketData.fetchRecentCandles(
-      symbol.symbol,
-      this.config.timeframe,
-      Math.max(this.config.signal.n + this.config.signal.hBars + 8, 192)
-    );
 
-    marketDataLatencyGauge.set({ symbol: symbol.symbol }, Date.now() - startedAt);
+    try {
+      exchangeCandles = await this.marketData.fetchRecentCandles(
+        symbol.symbol,
+        this.config.timeframe,
+        historyLimit
+      );
 
-    if (this.config.enableCandleStorage) {
-      await this.db.upsertCandles(candles);
+      marketDataLatencyGauge.set({ symbol: symbol.symbol }, Date.now() - startedAt);
+    } catch (error) {
+      usedCacheFallback = true;
+      this.logger.warn(
+        { error, symbol: symbol.symbol },
+        'Exchange candle fetch failed; falling back to cached candles.'
+      );
+    }
+
+    const exchangeDiagnostics = analyzeCandleSeries(exchangeCandles, this.config.timeframe);
+
+    if (exchangeDiagnostics.issues.length > 0) {
+      this.logger.warn(
+        { symbol: symbol.symbol, diagnostics: exchangeDiagnostics },
+        'Exchange candle quality issue detected.'
+      );
+    }
+
+    if (exchangeCandles.length > 0 && this.config.enableCandleStorage) {
+      await this.db.upsertCandles(exchangeCandles);
+    }
+
+    const candles = mergeCandles(cachedCandles, exchangeCandles);
+    const combinedDiagnostics = analyzeCandleSeries(candles, this.config.timeframe);
+
+    if (combinedDiagnostics.issues.length > 0) {
+      this.logger.warn(
+        {
+          symbol: symbol.symbol,
+          diagnostics: combinedDiagnostics,
+          usedCacheFallback
+        },
+        'Merged candle quality issue detected.'
+      );
+    }
+
+    if (candles.length === 0) {
+      return;
     }
 
     const lastProcessed = await this.db.getLastProcessedCloseTime(runId, symbol.id);
@@ -336,7 +392,12 @@ export class TradingRunner {
       this.lastTickCompletedAt = new Date().toISOString();
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : 'Unknown runner error';
-      dbWriteErrorsCounter.inc();
+      runnerErrorsCounter.inc();
+
+      if (isDatabaseError(error)) {
+        dbWriteErrorsCounter.inc();
+      }
+
       this.logger.error({ error }, 'Runner tick failed.');
       await this.notifications.notifyRunnerError(this.lastError);
     } finally {

@@ -1,5 +1,5 @@
-import { SettingsClient } from '../../components/settings-client.tsx';
-import { fetchApi } from '../../lib/api.ts';
+import { SettingsClient } from '@/components/settings-client.tsx';
+import { fetchApi } from '@/lib/api.ts';
 
 export const dynamic = 'force-dynamic';
 

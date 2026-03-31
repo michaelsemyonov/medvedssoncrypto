@@ -5,7 +5,6 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "preserve",
-    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -17,6 +16,7 @@
     "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
+      "@/*": ["apps/pwa/*"],
       "@medvedsson/shared": ["packages/shared/src/index.ts"],
       "@medvedsson/strategy": ["packages/strategy/src/index.ts"],
       "@medvedsson/execution": ["packages/execution/src/index.ts"],

@@ -11,6 +11,11 @@ services:
       - '3306:3306'
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   api:
     build:
@@ -19,7 +24,8 @@ services:
       target: api
     container_name: medvedsson-api
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -28,6 +34,11 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:3000
     ports:
       - '3000:3000'
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
 
   pwa:
     build:
@@ -36,7 +47,8 @@ services:
       target: pwa
     container_name: medvedsson-pwa
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -44,6 +56,11 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:3000
     ports:
       - '3001:3001'
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
 
   adminer:
     image: adminer:4

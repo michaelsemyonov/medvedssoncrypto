@@ -44,6 +44,7 @@ const envSchema = z.object({
   SIGNAL_K: numberish.default(5),
   SIGNAL_H_BARS: numberish.default(72),
   FILL_MODEL: z.literal('next_open').default('next_open'),
+  POSITION_SIZING_MODE: z.literal('fixed_usdt').default('fixed_usdt'),
   FEE_RATE: numberish.default(0.001),
   SLIPPAGE_BPS: numberish.default(5),
   FIXED_USDT_PER_TRADE: numberish.default(100),
@@ -92,6 +93,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     },
     execution: {
       fillModel: parsed.FILL_MODEL,
+      positionSizingMode: parsed.POSITION_SIZING_MODE,
       feeRate: parsed.FEE_RATE,
       slippageBps: parsed.SLIPPAGE_BPS,
       fixedUsdtPerTrade: parsed.FIXED_USDT_PER_TRADE,

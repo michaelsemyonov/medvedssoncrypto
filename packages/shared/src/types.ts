@@ -121,8 +121,11 @@ export type RiskInput = {
 
 export type FillModel = 'next_open';
 
+export type PositionSizingMode = 'fixed_usdt';
+
 export type ExecutionConfig = {
   fillModel: FillModel;
+  positionSizingMode: PositionSizingMode;
   feeRate: number;
   slippageBps: number;
   fixedUsdtPerTrade: number;

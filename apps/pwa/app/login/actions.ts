@@ -23,7 +23,8 @@ const getAuthConfig = () => {
 
 export const loginAction = async (formData: FormData): Promise<void> => {
   const { adminPassword, sessionSecret, sessionTtlHours } = getAuthConfig();
-  const password = String(formData.get('password') ?? '');
+  const passwordValue = formData.get('password');
+  const password = typeof passwordValue === 'string' ? passwordValue : '';
 
   if (password !== adminPassword) {
     redirect('/login?error=invalid');

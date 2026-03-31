@@ -75,6 +75,10 @@ export const buildPendingOrder = (
   const side = getOrderSide(positionSide, intent);
 
   if (intent === 'OPEN_POSITION') {
+    if (config.positionSizingMode !== 'fixed_usdt') {
+      throw new Error('Unsupported position sizing mode.');
+    }
+
     const fillPrice = adjustForSlippage(referencePrice, side, config.slippageBps);
     const qty = round(config.fixedUsdtPerTrade / fillPrice, 8);
     const feeAmount = round(config.fixedUsdtPerTrade * config.feeRate, 8);

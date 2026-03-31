@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
 import Link from 'next/link';
 
-import { ServiceWorkerRegister } from '../components/service-worker-register.tsx';
+import { ServiceWorkerRegister } from '@/components/service-worker-register.tsx';
 import './globals.css';
 
 const spaceGrotesk = Space_Grotesk({

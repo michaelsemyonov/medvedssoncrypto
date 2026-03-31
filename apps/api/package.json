@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
+    "@fastify/rate-limit": "^10.3.0",
     "@medvedsson/core": "workspace:*",
     "@medvedsson/db": "workspace:*",
     "@medvedsson/market-data": "workspace:*",
@@ -16,6 +17,7 @@
     "@medvedsson/shared": "workspace:*",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.0",
-    "pino": "^9.9.0"
+    "pino": "^9.9.0",
+    "zod": "^3.24.2"
   }
 }

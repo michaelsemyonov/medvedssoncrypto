@@ -1,5 +1,6 @@
 import cors from '@fastify/cors';
-import { TradingRunner } from '@medvedsson/core';
+import rateLimit from '@fastify/rate-limit';
+import { notificationFailuresCounter, TradingRunner } from '@medvedsson/core';
 import { createDatabase } from '@medvedsson/db';
 import { MarketDataAdapter } from '@medvedsson/market-data';
 import { NotificationService } from '@medvedsson/notifications';
@@ -14,6 +15,49 @@ import {
 } from '@medvedsson/shared';
 import Fastify from 'fastify';
 import pino from 'pino';
+import { z } from 'zod';
+
+const paginationQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0)
+});
+
+const symbolUpdateSchema = z.object({
+  symbols: z.array(z.string().min(1)).default([])
+});
+
+const pushSubscribeSchema = z.object({
+  subscription: z.object({
+    endpoint: z.string().url(),
+    keys: z.object({
+      p256dh: z.string().min(1),
+      auth: z.string().min(1)
+    })
+  }),
+  symbolFilters: z.array(z.string().min(1)).nullable().optional(),
+  eventFilters: z.array(z.string().min(1)).nullable().optional(),
+  userLabel: z.string().max(255).nullable().optional()
+});
+
+const pushUnsubscribeSchema = z.object({
+  endpoint: z.string().url()
+});
+
+const parseOrReply = <TSchema extends z.ZodTypeAny>(schema: TSchema, input: unknown): z.infer<TSchema> => {
+  const parsed = schema.safeParse(input);
+
+  if (!parsed.success) {
+    throw Object.assign(new Error('Validation failed'), {
+      statusCode: 400,
+      payload: {
+        error: 'Invalid request',
+        details: parsed.error.flatten()
+      }
+    });
+  }
+
+  return parsed.data as z.infer<TSchema>;
+};
 
 export const buildApp = async () => {
   const config = loadConfig();
@@ -26,12 +70,23 @@ export const buildApp = async () => {
   });
 
   const app = Fastify({
-    loggerInstance: logger
+    loggerInstance: logger,
+    requestIdHeader: 'x-request-id'
   });
 
   await app.register(cors, {
     origin: true,
     credentials: true
+  });
+
+  await app.register(rateLimit, {
+    max: 240,
+    timeWindow: '1 minute',
+    skipOnError: true
+  });
+
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id);
   });
 
   const publicPaths = new Set(['/health', '/ready', '/metrics']);
@@ -69,7 +124,9 @@ export const buildApp = async () => {
     },
     logger
   );
-  const notifications = new NotificationService(config, db, logger);
+  const notifications = new NotificationService(config, db, logger, () => {
+    notificationFailuresCounter.inc();
+  });
   const runner = new TradingRunner({
     config,
     db,
@@ -80,14 +137,43 @@ export const buildApp = async () => {
 
   await runner.init();
 
-  app.get('/health', async () => ({
-    status: 'ok',
-    service: 'medvedsson-crypto-api',
-    runner: runner.getStatus()
-  }));
+  app.setErrorHandler((error, request, reply) => {
+    request.log.error({ err: error }, 'Request failed.');
+
+    const statusCode = Number((error as { statusCode?: number }).statusCode ?? 500);
+    const payload = (error as { payload?: unknown }).payload;
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    return reply.code(statusCode).send(
+      payload ?? {
+        error: statusCode >= 500 ? 'Internal Server Error' : message
+      }
+    );
+  });
+
+  app.get('/health', async (request, reply) => {
+    try {
+      await db.ping();
+
+      return {
+        status: 'ok',
+        service: 'medvedsson-crypto-api',
+        db: 'up',
+        runner: runner.getStatus()
+      };
+    } catch (error) {
+      request.log?.error?.({ err: error }, 'Health DB check failed.');
+      return reply.code(503).send({
+        status: 'degraded',
+        service: 'medvedsson-crypto-api',
+        db: 'down',
+        runner: runner.getStatus()
+      });
+    }
+  });
 
   app.get('/ready', async () => {
-    await db.listRuns();
+    await db.ping();
 
     return {
       status: 'ready'
@@ -120,17 +206,17 @@ export const buildApp = async () => {
   }));
 
   app.put('/symbols', async (request) => {
-    const body = request.body as { symbols?: string[] };
-    const symbols = (body.symbols ?? []).map(normalizeSymbol);
+    const body = parseOrReply(symbolUpdateSchema, request.body);
+    const symbols = body.symbols.map(normalizeSymbol);
     const updated = await db.replaceActiveSymbols(config.exchange, symbols);
     return { symbols: updated };
   });
 
   app.get('/signals/recent', async (request) => {
-    const query = request.query as { limit?: string };
-    const limit = Number(query.limit ?? 100);
+    const query = parseOrReply(paginationQuerySchema, request.query);
     return {
-      signals: await db.getRecentSignals(limit)
+      signals: await db.getRecentSignals(query.limit, query.offset),
+      page: query
     };
   });
 
@@ -147,10 +233,10 @@ export const buildApp = async () => {
   });
 
   app.get('/trades/recent', async (request) => {
-    const query = request.query as { limit?: string };
-    const limit = Number(query.limit ?? 100);
+    const query = parseOrReply(paginationQuerySchema, request.query);
     return {
-      trades: await db.getRecentTrades(limit)
+      trades: await db.getRecentTrades(query.limit, query.offset),
+      page: query
     };
   });
 
@@ -176,18 +262,7 @@ export const buildApp = async () => {
   });
 
   app.post('/push/subscribe', async (request) => {
-    const body = request.body as {
-      subscription: {
-        endpoint: string;
-        keys: {
-          p256dh: string;
-          auth: string;
-        };
-      };
-      symbolFilters?: string[] | null;
-      eventFilters?: string[] | null;
-      userLabel?: string | null;
-    };
+    const body = parseOrReply(pushSubscribeSchema, request.body);
 
     const record: PushSubscriptionRecord = {
       endpoint: body.subscription.endpoint,
@@ -205,7 +280,7 @@ export const buildApp = async () => {
   });
 
   app.post('/push/unsubscribe', async (request) => {
-    const body = request.body as { endpoint: string };
+    const body = parseOrReply(pushUnsubscribeSchema, request.body);
     await db.disablePushSubscription(body.endpoint);
     return { ok: true };
   });
@@ -234,9 +309,10 @@ export const buildApp = async () => {
   });
 
   app.get('/signals', async (request) => {
-    const query = request.query as { limit?: string };
+    const query = parseOrReply(paginationQuerySchema, request.query);
     return {
-      signals: await db.getRecentSignals(Number(query.limit ?? 100))
+      signals: await db.getRecentSignals(query.limit, query.offset),
+      page: query
     };
   });
 
@@ -248,9 +324,10 @@ export const buildApp = async () => {
   });
 
   app.get('/trades', async (request) => {
-    const query = request.query as { limit?: string };
+    const query = parseOrReply(paginationQuerySchema, request.query);
     return {
-      trades: await db.getRecentTrades(Number(query.limit ?? 100))
+      trades: await db.getRecentTrades(query.limit, query.offset),
+      page: query
     };
   });
 

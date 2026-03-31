@@ -1,4 +1,4 @@
-import { fetchApi } from '../lib/api.ts';
+import { fetchApi } from '@/lib/api.ts';
 
 export const dynamic = 'force-dynamic';
 
