@@ -1341,14 +1341,32 @@ export class MedvedssonDatabase {
     };
   }
 
-  async getOpenPositions(
-    runId: string
-  ): Promise<
-    Array<PositionRow & { symbol: string; unrealized_pnl: number | null }>
+  async getOpenPositions(runId: string): Promise<
+    Array<
+      PositionRow & {
+        symbol: string;
+        unrealized_pnl: number | null;
+        trailing_profile: string;
+        trailing_enabled: boolean;
+        trailing_activation_profit_pct: number;
+        trailing_giveback_ratio: number;
+        trailing_giveback_min_pct: number;
+        trailing_giveback_max_pct: number;
+        trailing_min_locked_profit_pct: number;
+      }
+    >
   > {
     const rows = await query<MysqlRow>(
       this.pool,
-      `SELECT p.*, s.symbol
+      `SELECT p.*,
+              s.symbol,
+              s.trailing_profile,
+              s.trailing_enabled,
+              s.trailing_activation_profit_pct,
+              s.trailing_giveback_ratio,
+              s.trailing_giveback_min_pct,
+              s.trailing_giveback_max_pct,
+              s.trailing_min_locked_profit_pct
        FROM positions p
        INNER JOIN symbols s ON s.id = p.symbol_id
        WHERE p.strategy_run_id = ? AND p.status = 'OPEN'
@@ -1378,6 +1396,23 @@ export class MedvedssonDatabase {
           ...row,
           symbol,
           unrealized_pnl: unrealizedPnl,
+          trailing_profile: String(rawRow.trailing_profile ?? 'balanced'),
+          trailing_enabled: parseBoolean(rawRow.trailing_enabled ?? true),
+          trailing_activation_profit_pct: Number(
+            rawRow.trailing_activation_profit_pct ?? 1.2
+          ),
+          trailing_giveback_ratio: Number(
+            rawRow.trailing_giveback_ratio ?? 0.35
+          ),
+          trailing_giveback_min_pct: Number(
+            rawRow.trailing_giveback_min_pct ?? 0.4
+          ),
+          trailing_giveback_max_pct: Number(
+            rawRow.trailing_giveback_max_pct ?? 1.5
+          ),
+          trailing_min_locked_profit_pct: Number(
+            rawRow.trailing_min_locked_profit_pct ?? 0.4
+          ),
         };
       })
     );

@@ -121,6 +121,12 @@ function getTradeHeadlineClassName(trade: TradeRecord): string {
   return 'trade-summary-value';
 }
 
+function getTradeSideClassName(trade: TradeRecord): string {
+  return formatPrimitiveValue(trade.side) === 'SHORT'
+    ? 'pill pill-danger trade-summary-side'
+    : 'pill trade-summary-side';
+}
+
 function renderTradeDetailItems(trade: TradeRecord) {
   const detailItems = [
     ['Position ID', formatPrimitiveValue(trade.id)],
@@ -204,7 +210,7 @@ export default async function TradesPage() {
                     <span className="trade-summary-symbol">
                       {formatPrimitiveValue(trade.symbol)}
                     </span>
-                    <span className="pill trade-summary-side">
+                    <span className={getTradeSideClassName(trade)}>
                       {formatPrimitiveValue(trade.side)}
                     </span>
                     {Boolean(trade.is_counter_position) ? (
@@ -237,13 +243,17 @@ export default async function TradesPage() {
                     <strong>{formatSignedNumber(trade.realized_pnl)}</strong>
                   </span>
                 </summary>
-                <div className="trade-detail-grid">
-                  {details.map(([label, value]) => (
-                    <div className="trade-detail-item" key={`${tradeId}-${label}`}>
-                      <span className="trade-detail-label">{label}</span>
-                      <strong>{value}</strong>
-                    </div>
-                  ))}
+                <div className="trade-detail-wrap">
+                  <table className="data-table trade-detail-table">
+                    <tbody>
+                      {details.map(([label, value]) => (
+                        <tr key={`${tradeId}-${label}`}>
+                          <th scope="row">{label}</th>
+                          <td>{value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </details>
             );

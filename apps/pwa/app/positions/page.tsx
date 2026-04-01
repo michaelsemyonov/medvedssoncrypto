@@ -23,6 +23,13 @@ type PositionPageItem = {
   side: 'LONG' | 'SHORT';
   symbol: string;
   unrealized_pnl: number | null;
+  trailing_profile: string;
+  trailing_enabled: boolean;
+  trailing_activation_profit_pct: number;
+  trailing_giveback_ratio: number;
+  trailing_giveback_min_pct: number;
+  trailing_giveback_max_pct: number;
+  trailing_min_locked_profit_pct: number;
 };
 
 const formatSignedValue = (value: number | null): string =>
@@ -32,6 +39,20 @@ const formatUsdtValue = (value: number): string => `${value.toFixed(2)} USDT`;
 
 const getSideClassName = (side: PositionPageItem['side']): string =>
   side === 'LONG' ? 'pill' : 'pill pill-warn';
+
+const formatProfileLabel = (profile: string): string => {
+  const labels: Record<string, string> = {
+    conservative: 'Conservative',
+    balanced: 'Balanced',
+    aggressive: 'Aggressive',
+    custom: 'Custom',
+  };
+  return labels[profile] ?? profile;
+};
+
+const formatPct = (value: number): string => `${value.toFixed(2)}%`;
+
+const formatRatio = (value: number): string => value.toFixed(2);
 
 function PositionChartFallback() {
   return (
@@ -74,6 +95,69 @@ async function PositionChart({
       referencePrice={entryPrice}
       title="Latest 360 min"
     />
+  );
+}
+
+function TrailingDetails({ position }: { position: PositionPageItem }) {
+  return (
+    <details className="trade-row" style={{ marginTop: '8px' }}>
+      <summary
+        className="trade-summary"
+        style={{ gridTemplateColumns: '1fr auto' }}
+      >
+        <span className="trade-summary-main">
+          <span
+            className="trade-summary-symbol"
+            style={{ fontSize: '0.88rem' }}
+          >
+            Trailing Profit
+          </span>
+          <span
+            className={position.trailing_enabled ? 'pill' : 'pill pill-warn'}
+          >
+            {position.trailing_enabled ? 'Enabled' : 'Disabled'}
+          </span>
+        </span>
+        <span className="trade-summary-value">
+          <span className="trade-summary-label">Profile</span>
+          <strong>{formatProfileLabel(position.trailing_profile)}</strong>
+        </span>
+      </summary>
+      <div className="trade-detail-wrap">
+        <table className="data-table trade-detail-table">
+          <tbody>
+            <tr>
+              <th scope="row">Profile</th>
+              <td>{formatProfileLabel(position.trailing_profile)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Enabled</th>
+              <td>{position.trailing_enabled ? 'Yes' : 'No'}</td>
+            </tr>
+            <tr>
+              <th scope="row">Activation Profit</th>
+              <td>{formatPct(position.trailing_activation_profit_pct)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Giveback Ratio</th>
+              <td>{formatRatio(position.trailing_giveback_ratio)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Giveback Min</th>
+              <td>{formatPct(position.trailing_giveback_min_pct)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Giveback Max</th>
+              <td>{formatPct(position.trailing_giveback_max_pct)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Min Locked Profit</th>
+              <td>{formatPct(position.trailing_min_locked_profit_pct)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }
 
@@ -128,10 +212,13 @@ export default async function PositionsPage() {
                   </div>
                   <div className="signal-field">
                     <span className="signal-field-label">Unrealized PnL</span>
-                    <strong>{formatSignedValue(position.unrealized_pnl)}</strong>
+                    <strong>
+                      {formatSignedValue(position.unrealized_pnl)}
+                    </strong>
                   </div>
                 </div>
               </div>
+              <TrailingDetails position={position} />
               <Suspense fallback={<PositionChartFallback />}>
                 <PositionChart
                   entryPrice={position.entry_price}

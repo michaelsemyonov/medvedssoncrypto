@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type TrailingProfile = 'conservative' | 'balanced' | 'aggressive' | 'custom';
 
@@ -177,6 +177,20 @@ const cloneDraft = (draft: SymbolDraft): SymbolDraft => ({ ...draft });
 const sortBySymbol = (symbols: SymbolDraft[]): SymbolDraft[] =>
   [...symbols].sort((left, right) => left.symbol.localeCompare(right.symbol));
 
+const NEW_SYMBOL_MODAL_ID = '__new_symbol__';
+
+const isDraftPristine = (
+  draft: SymbolDraft,
+  defaults: SymbolDraft
+): boolean => {
+  const draftValues = { ...draft };
+  const defaultValues = { ...defaults };
+  delete draftValues.id;
+  delete defaultValues.id;
+
+  return JSON.stringify(draftValues) === JSON.stringify(defaultValues);
+};
+
 const readErrorMessage = async (response: Response): Promise<string> => {
   try {
     const payload = (await response.json()) as {
@@ -203,6 +217,7 @@ type SymbolEditorProps = {
     key: TKey,
     value: SymbolDraft[TKey]
   ) => void;
+  onClose: () => void;
   onSubmit: () => void;
 };
 
@@ -229,10 +244,11 @@ function SymbolEditor({
   saving,
   draft,
   onChange,
+  onClose,
   onSubmit,
 }: SymbolEditorProps) {
   return (
-    <section className="card stack-lg">
+    <section className="stack-lg">
       <div className="settings-head">
         <div>
           <div className="eyebrow">{title}</div>
@@ -719,6 +735,13 @@ function SymbolEditor({
 
       <div className="button-row">
         <button
+          className="secondary-button"
+          onClick={onClose}
+          type="button"
+        >
+          Close
+        </button>
+        <button
           className="primary-button"
           disabled={saving}
           onClick={onSubmit}
@@ -748,6 +771,47 @@ export function SettingsClient({
   );
   const [symbolStatus, setSymbolStatus] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [activeSymbolId, setActiveSymbolId] = useState<string | null>(null);
+
+  const hasUnsavedNewSymbol = useMemo(
+    () => !isDraftPristine(newSymbol, defaults),
+    [defaults, newSymbol]
+  );
+
+  const activeSymbolDraft =
+    activeSymbolId === NEW_SYMBOL_MODAL_ID
+      ? newSymbol
+      : symbols.find((symbol) => symbol.id === activeSymbolId) ?? null;
+
+  const activeSymbolTitle =
+    activeSymbolId === NEW_SYMBOL_MODAL_ID
+      ? hasUnsavedNewSymbol
+        ? 'Unsaved Symbol'
+        : 'Add Symbol'
+      : 'Edit Symbol';
+
+  const activeSymbolStatus =
+    activeSymbolId === NEW_SYMBOL_MODAL_ID
+      ? symbolStatus.new
+      : activeSymbolId
+        ? symbolStatus[activeSymbolId]
+        : undefined;
+
+  useEffect(() => {
+    if (activeSymbolId === null) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveSymbolId(null);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeSymbolId]);
 
   const updateSymbolDraft = <TKey extends keyof SymbolDraft>(
     id: string,
@@ -827,6 +891,7 @@ export function SettingsClient({
       const saved = await persistSymbol(newSymbol);
       setSymbols((current) => sortBySymbol([...current, saved]));
       setNewSymbol(cloneDraft(defaults));
+      setActiveSymbolId(null);
       setSymbolStatus((current) => ({
         ...current,
         new: `${saved.symbol} added.`,
@@ -979,42 +1044,105 @@ export function SettingsClient({
           id="settings-panel-symbols"
           role="tabpanel"
         >
-          <div className="stack-lg">
-            <SymbolEditor
-              title="Add Symbol"
-              submitLabel="Add Symbol"
-              status={symbolStatus.new}
-              saving={savingKey === 'new'}
-              draft={newSymbol}
-              onChange={updateNewSymbol}
-              onSubmit={() => void createSymbol()}
-            />
+          <section className="card settings-symbols-panel">
+            <div className="settings-symbols-toolbar">
+              <div>
+                <h2>Symbols</h2>
+                <p className="muted">
+                  Pick a symbol to edit its configuration, or add a new one.
+                </p>
+              </div>
+              <button
+                className="primary-button"
+                onClick={() => setActiveSymbolId(NEW_SYMBOL_MODAL_ID)}
+                type="button"
+              >
+                {hasUnsavedNewSymbol ? 'Continue Unsaved Symbol' : 'Add Symbol'}
+              </button>
+            </div>
 
-            {symbols.length === 0 ? (
-              <section className="card">
-                <p className="muted">No symbols are configured yet.</p>
-              </section>
+            {symbolStatus.new ? (
+              <p className="status-line">{symbolStatus.new}</p>
             ) : null}
 
-            {symbols.map((symbol) => (
-              <SymbolEditor
-                key={symbol.id}
-                title="Configured Symbol"
-                submitLabel="Save Settings"
-                status={symbol.id ? symbolStatus[symbol.id] : undefined}
-                saving={savingKey === symbol.id}
-                draft={symbol}
-                onChange={(key, value) => {
-                  if (!symbol.id) {
-                    return;
-                  }
+            {symbols.length === 0 ? (
+              <p className="muted">No symbols are configured yet.</p>
+            ) : (
+              <div className="symbol-list" role="list">
+                {symbols.map((symbol) => (
+                  <button
+                    className="symbol-list-item"
+                    key={symbol.id}
+                    onClick={() => setActiveSymbolId(symbol.id ?? null)}
+                    type="button"
+                  >
+                    <span className="symbol-list-main">
+                      <span className="symbol-list-title-row">
+                        <strong>{symbol.symbol}</strong>
+                        <span
+                          className={symbol.active ? 'pill' : 'pill pill-warn'}
+                        >
+                          {symbol.active ? 'Active' : 'Paused'}
+                        </span>
+                      </span>
+                      <span className="symbol-list-meta">
+                        {symbol.exchange.toUpperCase()} · {symbol.timeframe} ·{' '}
+                        {symbol.allowShort ? 'Short enabled' : 'Long only'}
+                      </span>
+                    </span>
+                    <span className="symbol-list-action">Edit</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
 
-                  updateSymbolDraft(symbol.id, key, value);
-                }}
-                onSubmit={() => void saveExistingSymbol(symbol)}
-              />
-            ))}
-          </div>
+          {activeSymbolDraft ? (
+            <div
+              aria-modal="true"
+              className="settings-modal-backdrop"
+              onClick={() => setActiveSymbolId(null)}
+              role="dialog"
+            >
+              <div
+                className="settings-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <SymbolEditor
+                  title={activeSymbolTitle}
+                  submitLabel={
+                    activeSymbolId === NEW_SYMBOL_MODAL_ID
+                      ? 'Add Symbol'
+                      : 'Save Settings'
+                  }
+                  status={activeSymbolStatus}
+                  saving={savingKey === activeSymbolId}
+                  draft={activeSymbolDraft}
+                  onChange={(key, value) => {
+                    if (activeSymbolId === NEW_SYMBOL_MODAL_ID) {
+                      updateNewSymbol(key, value);
+                      return;
+                    }
+
+                    if (!activeSymbolId) {
+                      return;
+                    }
+
+                    updateSymbolDraft(activeSymbolId, key, value);
+                  }}
+                  onClose={() => setActiveSymbolId(null)}
+                  onSubmit={() => {
+                    if (activeSymbolId === NEW_SYMBOL_MODAL_ID) {
+                      void createSymbol();
+                      return;
+                    }
+
+                    void saveExistingSymbol(activeSymbolDraft);
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <section

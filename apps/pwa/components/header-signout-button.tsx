@@ -3,6 +3,8 @@
 import { usePathname } from 'next/navigation';
 import { useTransition } from 'react';
 
+import { SignOutIcon } from '@/components/header-icons.tsx';
+
 export function HeaderSignOutButton() {
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
@@ -25,7 +27,10 @@ export function HeaderSignOutButton() {
       }}
       type="button"
     >
-      {isPending ? 'Signing Out...' : 'Sign Out'}
+      <span className="hero-link-content">
+        <SignOutIcon className="hero-link-icon" />
+        <span>{isPending ? 'Signing Out...' : 'Sign Out'}</span>
+      </span>
     </button>
   );
 }

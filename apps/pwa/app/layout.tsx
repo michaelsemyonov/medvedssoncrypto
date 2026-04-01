@@ -2,6 +2,13 @@ import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
 import Link from 'next/link';
 
+import {
+  DashboardIcon,
+  PositionsIcon,
+  SettingsIcon,
+  SignalsIcon,
+  TradesIcon,
+} from '@/components/header-icons.tsx';
 import { HeaderRunnerStatus } from '@/components/header-runner-status.tsx';
 import { HeaderSignOutButton } from '@/components/header-signout-button.tsx';
 import { ServiceWorkerRegister } from '@/components/service-worker-register.tsx';
@@ -49,19 +56,34 @@ export default function RootLayout({
             </div>
             <nav className="hero-nav">
               <Link className="hero-link" href="/">
-                Dashboard
+                <span className="hero-link-content">
+                  <DashboardIcon className="hero-link-icon" />
+                  <span>Dashboard</span>
+                </span>
               </Link>
               <Link className="hero-link" href="/signals">
-                Signals
+                <span className="hero-link-content">
+                  <SignalsIcon className="hero-link-icon" />
+                  <span>Signals</span>
+                </span>
               </Link>
               <Link className="hero-link" href="/positions">
-                Positions
+                <span className="hero-link-content">
+                  <PositionsIcon className="hero-link-icon" />
+                  <span>Positions</span>
+                </span>
               </Link>
               <Link className="hero-link" href="/trades">
-                Trades
+                <span className="hero-link-content">
+                  <TradesIcon className="hero-link-icon" />
+                  <span>Trades</span>
+                </span>
               </Link>
               <Link className="hero-link" href="/settings">
-                Settings
+                <span className="hero-link-content">
+                  <SettingsIcon className="hero-link-icon" />
+                  <span>Settings</span>
+                </span>
               </Link>
               <HeaderSignOutButton />
             </nav>

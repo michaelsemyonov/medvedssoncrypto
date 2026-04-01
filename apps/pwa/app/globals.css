@@ -174,6 +174,18 @@ a {
   transform: translateY(-1px);
 }
 
+.hero-link-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-link-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -295,24 +307,33 @@ a {
   color: var(--danger);
 }
 
-.trade-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
+.trade-detail-wrap {
   padding: 0 18px 18px;
   border-top: 1px solid var(--line);
 }
 
-.trade-detail-item {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(4, 10, 18, 0.7);
+.trade-detail-table {
+  margin-top: 12px;
 }
 
-.trade-detail-item strong {
+.trade-detail-table th,
+.trade-detail-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.trade-detail-table th {
+  width: 220px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trade-detail-table td {
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -360,6 +381,90 @@ a {
 .settings-shell {
   display: grid;
   gap: 16px;
+}
+
+.settings-symbols-panel,
+.settings-symbols-toolbar {
+  display: grid;
+  gap: 16px;
+}
+
+.symbol-list {
+  display: grid;
+  gap: 12px;
+}
+
+.symbol-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.symbol-list-item:hover {
+  border-color: rgba(110, 231, 183, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
+}
+
+.symbol-list-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.symbol-list-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.symbol-list-title-row strong {
+  font-size: 1rem;
+}
+
+.symbol-list-meta,
+.symbol-list-action {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(12px);
+}
+
+.settings-modal {
+  width: min(980px, 100%);
+  max-height: min(92vh, 980px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
 }
 
 .settings-toolbar {
@@ -576,14 +681,22 @@ a {
 
 .signal-candle-up line,
 .signal-candle-up rect {
-  fill: rgba(110, 231, 183, 0.28);
   stroke: #6ee7b7;
 }
 
 .signal-candle-down line,
 .signal-candle-down rect {
-  fill: rgba(251, 113, 133, 0.24);
   stroke: #fb7185;
+}
+
+.signal-candle-up rect {
+  fill: #6ee7b7;
+  stroke: none;
+}
+
+.signal-candle-down rect {
+  fill: #fb7185;
+  stroke: none;
 }
 
 .signal-chart-label {
@@ -722,6 +835,15 @@ a {
     align-items: stretch;
   }
 
+  .settings-symbols-toolbar {
+    justify-items: stretch;
+  }
+
+  .symbol-list-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .signals-pagination {
     flex-direction: column;
     align-items: stretch;
@@ -731,8 +853,28 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .trade-detail-grid {
-    grid-template-columns: 1fr;
+  .trade-detail-table,
+  .trade-detail-table tbody,
+  .trade-detail-table tr,
+  .trade-detail-table th,
+  .trade-detail-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .trade-detail-table tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .trade-detail-table th,
+  .trade-detail-table td {
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .trade-detail-table th {
+    margin-bottom: 6px;
   }
 
   .signal-card {
@@ -777,6 +919,15 @@ a {
 
   .hero-signout {
     width: 100%;
+  }
+
+  .settings-modal-backdrop {
+    padding: 12px;
+  }
+
+  .settings-modal {
+    padding: 16px;
+    max-height: min(100vh - 24px, 980px);
   }
 
   .hero-link {
