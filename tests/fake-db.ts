@@ -130,14 +130,13 @@ type PushSubscriptionRow = PushSubscriptionRecord & {
 };
 
 const compareClosedPositionsDesc = (
-  left: Pick<PositionRow, 'exit_time' | 'updated_at' | 'created_at'>,
-  right: Pick<PositionRow, 'exit_time' | 'updated_at' | 'created_at'>
+  left: Pick<PositionRow, 'entry_time' | 'updated_at' | 'created_at'>,
+  right: Pick<PositionRow, 'entry_time' | 'updated_at' | 'created_at'>
 ): number => {
-  const exitTimeDiff =
-    (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0);
+  const entryTimeDiff = right.entry_time.getTime() - left.entry_time.getTime();
 
-  if (exitTimeDiff !== 0) {
-    return exitTimeDiff;
+  if (entryTimeDiff !== 0) {
+    return entryTimeDiff;
   }
 
   const updatedAtDiff = right.updated_at.getTime() - left.updated_at.getTime();

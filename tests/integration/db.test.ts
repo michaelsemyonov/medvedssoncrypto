@@ -143,7 +143,7 @@ describe('database integration', () => {
     await db.close();
   });
 
-  it('returns recent trades in descending order when exit timestamps match', async () => {
+  it('returns recent trades in descending order by entry time', async () => {
     vi.useFakeTimers();
 
     const db = createFakeDatabase();
@@ -200,7 +200,7 @@ describe('database integration', () => {
       await db.fillPendingOrder(
         ethOpenOrder!.id,
         200,
-        '2026-01-01T00:05:00.000Z'
+        '2026-01-01T00:10:00.000Z'
       );
 
       const openPositions = await db.getOpenPositions(run.id);
@@ -260,7 +260,7 @@ describe('database integration', () => {
       await db.fillPendingOrder(
         ethCloseOrder!.id,
         202,
-        '2026-01-02T00:05:00.000Z'
+        '2026-01-02T00:04:00.000Z'
       );
 
       const trades = await db.getRecentTrades();

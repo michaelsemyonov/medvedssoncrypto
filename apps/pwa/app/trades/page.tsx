@@ -19,10 +19,11 @@ function compareTradesDesc(
   left: Record<string, unknown>,
   right: Record<string, unknown>
 ): number {
-  const exitTimeDiff = toTimestamp(right.exit_time) - toTimestamp(left.exit_time);
+  const entryTimeDiff =
+    toTimestamp(right.entry_time) - toTimestamp(left.entry_time);
 
-  if (exitTimeDiff !== 0) {
-    return exitTimeDiff;
+  if (entryTimeDiff !== 0) {
+    return entryTimeDiff;
   }
 
   const updatedAtDiff =
@@ -57,6 +58,7 @@ export default async function TradesPage() {
           <tr>
             <th>Symbol</th>
             <th>Side</th>
+            <th>Opened</th>
             <th>Entry</th>
             <th>Exit</th>
             <th>Duration</th>
@@ -67,7 +69,7 @@ export default async function TradesPage() {
         <tbody>
           {trades.length === 0 ? (
             <tr className="table-empty-row">
-              <td colSpan={7} className="muted">
+              <td colSpan={8} className="muted">
                 No trade data is available right now.
               </td>
             </tr>
@@ -80,6 +82,9 @@ export default async function TradesPage() {
               <tr key={String(trade.id)}>
                 <td data-label="Symbol">{String(trade.symbol)}</td>
                 <td data-label="Side">{String(trade.side)}</td>
+                <td data-label="Opened">
+                  {new Date(String(trade.entry_time)).toLocaleString()}
+                </td>
                 <td data-label="Entry">
                   {Number(trade.entry_price).toFixed(4)}
                 </td>

@@ -1266,7 +1266,7 @@ export class MedvedssonDatabase {
        FROM positions p
        INNER JOIN symbols s ON s.id = p.symbol_id
        WHERE p.status = 'CLOSED'
-       ORDER BY p.exit_time DESC, p.updated_at DESC, p.created_at DESC
+       ORDER BY p.entry_time DESC, p.updated_at DESC, p.created_at DESC
        LIMIT ? OFFSET ?`,
       [limit, offset]
     );
