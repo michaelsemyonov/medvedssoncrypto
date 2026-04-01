@@ -52,6 +52,12 @@ wait_for_http() {
   return 1
 }
 
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  stash_label="codex-deploy-$(date +%Y%m%d%H%M%S)"
+  echo "Remote working tree is dirty. Stashing changes as $stash_label before deploy."
+  git stash push --include-untracked --message "$stash_label" >/dev/null
+fi
+
 git fetch origin main
 git checkout main
 git pull --ff-only origin main
