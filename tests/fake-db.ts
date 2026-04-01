@@ -60,6 +60,10 @@ type SignalRow = {
   created_at: Date;
 };
 
+type SignalWithCandlesRow = SignalRow & {
+  recent_candles: Candle[];
+};
+
 type PositionRow = {
   id: string;
   strategy_run_id: string;
@@ -814,6 +818,33 @@ export class FakeMedvedssonDatabase {
           right.candle_close_time.getTime() - left.candle_close_time.getTime()
       )
       .slice(0, limit);
+  }
+
+  async getRecentSignalsWithCandles(
+    limit = 100,
+    offset = 0,
+    candleCount = 12
+  ): Promise<SignalWithCandlesRow[]> {
+    return [...this.signals]
+      .sort(
+        (left, right) =>
+          right.candle_close_time.getTime() - left.candle_close_time.getTime()
+      )
+      .slice(offset, offset + limit)
+      .map((signal) => ({
+        ...signal,
+        recent_candles: this.candles
+          .filter(
+            (candle) =>
+              candle.exchange === signal.exchange &&
+              candle.symbol === signal.symbol &&
+              candle.timeframe === signal.timeframe &&
+              new Date(candle.closeTime).getTime() <=
+                signal.candle_close_time.getTime()
+          )
+          .sort((left, right) => left.closeTime.localeCompare(right.closeTime))
+          .slice(-candleCount),
+      }));
   }
 
   async getRecentTrades(

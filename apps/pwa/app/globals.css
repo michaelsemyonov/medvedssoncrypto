@@ -165,6 +165,125 @@ a {
   border-collapse: collapse;
 }
 
+.signal-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.signal-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 340px);
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.signal-summary,
+.signal-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.signal-head,
+.signal-chart-head,
+.signal-chart-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.signal-symbol {
+  margin: 4px 0 0;
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+}
+
+.signal-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.signal-field,
+.signal-chart {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(4, 10, 18, 0.78);
+}
+
+.signal-field {
+  min-width: 0;
+}
+
+.signal-field strong {
+  display: block;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.signal-field-label,
+.signal-chart-head,
+.signal-chart-foot,
+.signal-chart-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.signal-chart {
+  display: grid;
+  gap: 10px;
+  align-self: stretch;
+}
+
+.signal-chart-empty {
+  align-items: center;
+}
+
+.signal-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.signal-chart-trigger {
+  fill: rgba(110, 231, 183, 0.08);
+  stroke: rgba(110, 231, 183, 0.22);
+}
+
+.signal-chart-baseline {
+  stroke: rgba(159, 182, 211, 0.2);
+  stroke-dasharray: 4 4;
+}
+
+.signal-candle line,
+.signal-candle rect {
+  stroke-width: 1.5;
+}
+
+.signal-candle-up line,
+.signal-candle-up rect {
+  fill: rgba(110, 231, 183, 0.28);
+  stroke: #6ee7b7;
+}
+
+.signal-candle-down line,
+.signal-candle-down rect {
+  fill: rgba(251, 113, 133, 0.24);
+  stroke: #fb7185;
+}
+
+.signal-chart-label {
+  letter-spacing: 0.04em;
+}
+
+.signal-chart-label-end {
+  text-anchor: end;
+}
+
 .data-table th,
 .data-table td {
   padding: 12px 10px;
@@ -264,6 +383,10 @@ a {
 @media (max-width: 720px) {
   .shell {
     padding: 0 12px 40px;
+  }
+
+  .signal-card {
+    grid-template-columns: 1fr;
   }
 
   .hero,

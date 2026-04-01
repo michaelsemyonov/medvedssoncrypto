@@ -73,6 +73,10 @@ type SignalRow = {
   created_at: Date;
 };
 
+type SignalWithCandlesRow = SignalRow & {
+  recent_candles: Candle[];
+};
+
 type PositionRow = {
   id: string;
   strategy_run_id: string;
@@ -1256,6 +1260,90 @@ export class MedvedssonDatabase {
     return rows.map(normalizeSignalRow);
   }
 
+  async getRecentSignalsWithCandles(
+    limit = 100,
+    offset = 0,
+    candleCount = 12
+  ): Promise<SignalWithCandlesRow[]> {
+    const signals = await this.getRecentSignals(limit, offset);
+
+    if (signals.length === 0 || candleCount <= 0) {
+      return signals.map((signal) => ({
+        ...signal,
+        recent_candles: [],
+      }));
+    }
+
+    const placeholders = signals.map(() => '?').join(', ');
+    const candleRows = await query<MysqlRow>(
+      this.pool,
+      `WITH ranked_candles AS (
+         SELECT
+           s.id AS signal_id,
+           mc.exchange AS candle_exchange,
+           mc.symbol AS candle_symbol,
+           mc.timeframe AS candle_timeframe,
+           mc.open_time AS candle_open_time,
+           mc.close_time AS candle_close_time,
+           mc.open AS candle_open,
+           mc.high AS candle_high,
+           mc.low AS candle_low,
+           mc.close AS candle_close,
+           mc.volume AS candle_volume,
+           mc.source AS candle_source,
+           ROW_NUMBER() OVER (
+             PARTITION BY s.id
+             ORDER BY mc.close_time DESC
+           ) AS candle_rank
+         FROM signals s
+         LEFT JOIN market_candles mc
+           ON mc.exchange = s.exchange
+          AND mc.symbol = s.symbol
+          AND mc.timeframe = s.timeframe
+          AND mc.close_time <= s.candle_close_time
+         WHERE s.id IN (${placeholders})
+       )
+       SELECT *
+       FROM ranked_candles
+       WHERE candle_rank <= ?
+       ORDER BY signal_id ASC, candle_rank DESC`,
+      [...signals.map((signal) => signal.id), candleCount]
+    );
+
+    const candlesBySignalId = new Map<string, Candle[]>();
+
+    for (const row of candleRows) {
+      const signalId = String(row.signal_id);
+
+      if (!candlesBySignalId.has(signalId)) {
+        candlesBySignalId.set(signalId, []);
+      }
+
+      if (row.candle_close_time === null) {
+        continue;
+      }
+
+      candlesBySignalId.get(signalId)!.push({
+        exchange: String(row.candle_exchange),
+        symbol: String(row.candle_symbol),
+        timeframe: String(row.candle_timeframe) as Candle['timeframe'],
+        openTime: parseDate(row.candle_open_time)!.toISOString(),
+        closeTime: parseDate(row.candle_close_time)!.toISOString(),
+        open: Number(row.candle_open),
+        high: Number(row.candle_high),
+        low: Number(row.candle_low),
+        close: Number(row.candle_close),
+        volume: Number(row.candle_volume),
+        source: String(row.candle_source),
+      });
+    }
+
+    return signals.map((signal) => ({
+      ...signal,
+      recent_candles: candlesBySignalId.get(signal.id) ?? [],
+    }));
+  }
+
   async getRecentTrades(
     limit = 100,
     offset = 0
@@ -1281,10 +1369,8 @@ export class MedvedssonDatabase {
     runId: string | null,
     startingEquity: number
   ): Promise<Record<string, number>> {
-    const runFilter =
-      runId === null ? '' : 'WHERE strategy_run_id = ?';
-    const drawdownFilter =
-      runId === null ? '' : ' WHERE strategy_run_id = ?';
+    const runFilter = runId === null ? '' : 'WHERE strategy_run_id = ?';
+    const drawdownFilter = runId === null ? '' : ' WHERE strategy_run_id = ?';
     const params = runId === null ? [] : [runId, runId];
     const rows = await query<MysqlRow>(
       this.pool,

@@ -11,7 +11,7 @@ import {
   parseCookieHeader,
   SESSION_COOKIE_NAME,
   type PushSubscriptionRecord,
-  verifySessionToken
+  verifySessionToken,
 } from '@medvedsson/shared';
 import Fastify from 'fastify';
 import pino from 'pino';
@@ -19,11 +19,13 @@ import { z } from 'zod';
 
 const paginationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
-  offset: z.coerce.number().int().min(0).default(0)
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
+const SIGNAL_CHART_CANDLE_COUNT = 12;
+
 const symbolUpdateSchema = z.object({
-  symbols: z.array(z.string().min(1)).default([])
+  symbols: z.array(z.string().min(1)).default([]),
 });
 
 const pushSubscribeSchema = z.object({
@@ -31,19 +33,22 @@ const pushSubscribeSchema = z.object({
     endpoint: z.string().url(),
     keys: z.object({
       p256dh: z.string().min(1),
-      auth: z.string().min(1)
-    })
+      auth: z.string().min(1),
+    }),
   }),
   symbolFilters: z.array(z.string().min(1)).nullable().optional(),
   eventFilters: z.array(z.string().min(1)).nullable().optional(),
-  userLabel: z.string().max(255).nullable().optional()
+  userLabel: z.string().max(255).nullable().optional(),
 });
 
 const pushUnsubscribeSchema = z.object({
-  endpoint: z.string().url()
+  endpoint: z.string().url(),
 });
 
-const parseOrReply = <TSchema extends z.ZodTypeAny>(schema: TSchema, input: unknown): z.infer<TSchema> => {
+const parseOrReply = <TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  input: unknown
+): z.infer<TSchema> => {
   const parsed = schema.safeParse(input);
 
   if (!parsed.success) {
@@ -51,8 +56,8 @@ const parseOrReply = <TSchema extends z.ZodTypeAny>(schema: TSchema, input: unkn
       statusCode: 400,
       payload: {
         error: 'Invalid request',
-        details: parsed.error.flatten()
-      }
+        details: parsed.error.flatten(),
+      },
     });
   }
 
@@ -65,24 +70,24 @@ export const buildApp = async () => {
     level: config.logLevel,
     redact: {
       paths: ['req.headers.authorization'],
-      remove: true
-    }
+      remove: true,
+    },
   });
 
   const app = Fastify({
     loggerInstance: logger,
-    requestIdHeader: 'x-request-id'
+    requestIdHeader: 'x-request-id',
   });
 
   await app.register(cors, {
     origin: true,
-    credentials: true
+    credentials: true,
   });
 
   await app.register(rateLimit, {
     max: 240,
     timeWindow: '1 minute',
-    skipOnError: true
+    skipOnError: true,
   });
 
   app.addHook('onRequest', async (request, reply) => {
@@ -99,7 +104,9 @@ export const buildApp = async () => {
     }
 
     const bearerToken = getBearerToken(request.headers.authorization);
-    const cookieToken = parseCookieHeader(request.headers.cookie)[SESSION_COOKIE_NAME];
+    const cookieToken = parseCookieHeader(request.headers.cookie)[
+      SESSION_COOKIE_NAME
+    ];
     const session = verifySessionToken(
       bearerToken ?? cookieToken ?? '',
       config.auth.sessionSecret
@@ -107,7 +114,7 @@ export const buildApp = async () => {
 
     if (!session) {
       return reply.code(401).send({
-        error: 'Unauthorized'
+        error: 'Unauthorized',
       });
     }
   });
@@ -120,7 +127,7 @@ export const buildApp = async () => {
     {
       exchange: config.exchange,
       timeoutMs: config.exchangeTimeoutMs,
-      rateLimitMs: config.exchangeRateLimitMs
+      rateLimitMs: config.exchangeRateLimitMs,
     },
     logger
   );
@@ -132,7 +139,7 @@ export const buildApp = async () => {
     db,
     marketData,
     notifications,
-    logger
+    logger,
   });
 
   await runner.init();
@@ -140,13 +147,15 @@ export const buildApp = async () => {
   app.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, 'Request failed.');
 
-    const statusCode = Number((error as { statusCode?: number }).statusCode ?? 500);
+    const statusCode = Number(
+      (error as { statusCode?: number }).statusCode ?? 500
+    );
     const payload = (error as { payload?: unknown }).payload;
     const message = error instanceof Error ? error.message : 'Unknown error';
 
     return reply.code(statusCode).send(
       payload ?? {
-        error: statusCode >= 500 ? 'Internal Server Error' : message
+        error: statusCode >= 500 ? 'Internal Server Error' : message,
       }
     );
   });
@@ -159,7 +168,7 @@ export const buildApp = async () => {
         status: 'ok',
         service: 'medvedsson-crypto-api',
         db: 'up',
-        runner: runner.getStatus()
+        runner: runner.getStatus(),
       };
     } catch (error) {
       request.log?.error?.({ err: error }, 'Health DB check failed.');
@@ -167,7 +176,7 @@ export const buildApp = async () => {
         status: 'degraded',
         service: 'medvedsson-crypto-api',
         db: 'down',
-        runner: runner.getStatus()
+        runner: runner.getStatus(),
       });
     }
   });
@@ -176,7 +185,7 @@ export const buildApp = async () => {
     await db.ping();
 
     return {
-      status: 'ready'
+      status: 'ready',
     };
   });
 
@@ -188,7 +197,7 @@ export const buildApp = async () => {
 
   app.get('/runs', async () => ({
     runs: await db.listRuns(),
-    runner: runner.getStatus()
+    runner: runner.getStatus(),
   }));
 
   app.post('/runs/start', async () => {
@@ -202,7 +211,7 @@ export const buildApp = async () => {
   });
 
   app.get('/symbols', async () => ({
-    symbols: await db.listSymbols()
+    symbols: await db.listSymbols(),
   }));
 
   app.put('/symbols', async (request) => {
@@ -216,7 +225,7 @@ export const buildApp = async () => {
     const query = parseOrReply(paginationQuerySchema, request.query);
     return {
       signals: await db.getRecentSignals(query.limit, query.offset),
-      page: query
+      page: query,
     };
   });
 
@@ -228,7 +237,7 @@ export const buildApp = async () => {
     }
 
     return {
-      positions: await db.getOpenPositions(run.id)
+      positions: await db.getOpenPositions(run.id),
     };
   });
 
@@ -236,7 +245,7 @@ export const buildApp = async () => {
     const query = parseOrReply(paginationQuerySchema, request.query);
     return {
       trades: await db.getRecentTrades(query.limit, query.offset),
-      page: query
+      page: query,
     };
   });
 
@@ -251,13 +260,13 @@ export const buildApp = async () => {
           averageTradeReturn: 0,
           totalRealizedPnl: 0,
           equity: config.execution.equityStartUsdt,
-          maxDrawdownPct: 0
-        }
+          maxDrawdownPct: 0,
+        },
       };
     }
 
     return {
-      stats: await db.getStatsSummary(null, config.execution.equityStartUsdt)
+      stats: await db.getStatsSummary(null, config.execution.equityStartUsdt),
     };
   });
 
@@ -271,7 +280,7 @@ export const buildApp = async () => {
       enabled: true,
       symbolFilters: body.symbolFilters?.map(normalizeSymbol) ?? null,
       eventFilters: body.eventFilters ?? null,
-      userLabel: body.userLabel ?? null
+      userLabel: body.userLabel ?? null,
     };
 
     await db.upsertPushSubscription(record);
@@ -289,38 +298,43 @@ export const buildApp = async () => {
     const activeRun = await db.getActiveRun();
     const runs = await db.listRuns();
     const positions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
-    const stats = runs.length > 0
-      ? await db.getStatsSummary(null, config.execution.equityStartUsdt)
-      : {
-          closedTrades: 0,
-          winRate: 0,
-          averageTradeReturn: 0,
-          totalRealizedPnl: 0,
-          equity: config.execution.equityStartUsdt,
-          maxDrawdownPct: 0
-        };
+    const stats =
+      runs.length > 0
+        ? await db.getStatsSummary(null, config.execution.equityStartUsdt)
+        : {
+            closedTrades: 0,
+            winRate: 0,
+            averageTradeReturn: 0,
+            totalRealizedPnl: 0,
+            equity: config.execution.equityStartUsdt,
+            maxDrawdownPct: 0,
+          };
 
     return {
       activeSymbols: (await db.listSymbols()).filter((symbol) => symbol.active),
       latestSignals: await db.getLatestSignalsBySymbol(),
       openPositionsCount: positions.length,
       stats,
-      runner: runner.getStatus()
+      runner: runner.getStatus(),
     };
   });
 
   app.get('/signals', async (request) => {
     const query = parseOrReply(paginationQuerySchema, request.query);
     return {
-      signals: await db.getRecentSignals(query.limit, query.offset),
-      page: query
+      signals: await db.getRecentSignalsWithCandles(
+        query.limit,
+        query.offset,
+        SIGNAL_CHART_CANDLE_COUNT
+      ),
+      page: query,
     };
   });
 
   app.get('/positions', async () => {
     const run = await db.getActiveRun();
     return {
-      positions: run ? await db.getOpenPositions(run.id) : []
+      positions: run ? await db.getOpenPositions(run.id) : [],
     };
   });
 
@@ -328,18 +342,20 @@ export const buildApp = async () => {
     const query = parseOrReply(paginationQuerySchema, request.query);
     return {
       trades: await db.getRecentTrades(query.limit, query.offset),
-      page: query
+      page: query,
     };
   });
 
   app.get('/settings', async () => ({
     vapidPublicKey: config.webPushVapidPublicKey,
-    symbols: (await db.listSymbols()).filter((symbol) => symbol.active).map((symbol) => symbol.symbol),
+    symbols: (await db.listSymbols())
+      .filter((symbol) => symbol.active)
+      .map((symbol) => symbol.symbol),
     exchange: config.exchange,
     timeframe: config.timeframe,
     strategyKey: config.strategyKey,
     strategyVersion: config.strategyVersion,
-    dryRun: config.dryRun
+    dryRun: config.dryRun,
   }));
 
   app.addHook('onClose', async () => {

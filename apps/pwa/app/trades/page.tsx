@@ -1,4 +1,5 @@
 import { fetchApiWithFallback } from '@/lib/api.ts';
+import { formatDateTime } from '@/lib/datetime.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,9 +83,7 @@ export default async function TradesPage() {
               <tr key={String(trade.id)}>
                 <td data-label="Symbol">{String(trade.symbol)}</td>
                 <td data-label="Side">{String(trade.side)}</td>
-                <td data-label="Opened">
-                  {new Date(String(trade.entry_time)).toLocaleString()}
-                </td>
+                <td data-label="Opened">{formatDateTime(trade.entry_time)}</td>
                 <td data-label="Entry">
                   {Number(trade.entry_price).toFixed(4)}
                 </td>

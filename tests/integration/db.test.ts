@@ -1,4 +1,5 @@
 import { buildTestConfig } from '../helpers.ts';
+import { generateCandles } from '../helpers.ts';
 import { createFakeDatabase } from '../fake-db.ts';
 
 describe('database integration', () => {
@@ -140,6 +141,64 @@ describe('database integration', () => {
       '2026-01-01T00:05:00.000Z'
     );
     expect((await db.getRecentSignals()).length).toBe(0);
+    await db.close();
+  });
+
+  it('returns the latest 60 minutes of candles for each signal including the trigger candle', async () => {
+    const db = createFakeDatabase();
+    const config = buildTestConfig();
+
+    await db.migrate();
+    const run = await db.startRun(config);
+    const [symbol] = await db.replaceActiveSymbols(
+      config.exchange,
+      config.symbols
+    );
+
+    await db.upsertCandles(
+      generateCandles([
+        100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113,
+      ])
+    );
+
+    await db.insertSignal({
+      runId: run.id,
+      symbolId: symbol!.id,
+      exchange: config.exchange,
+      symbol: symbol!.symbol,
+      timeframe: config.timeframe,
+      signal: {
+        signalType: 'LONG_ENTRY',
+        candleCloseTime: '2026-01-01T01:10:00.000Z',
+        signalStrength: 1,
+        formulaInputs: {
+          r_t: 0.05,
+          B_t: 0,
+          N: 96,
+          k: 5,
+          H: 72,
+          threshold: 0.04,
+          comparison: 'LONG',
+        },
+        indicators: {
+          return: 0.05,
+          baselineMoveMagnitude: 0,
+        },
+        features: {},
+        reason: 'Momentum breakout.',
+      },
+    });
+
+    const [signal] = await db.getRecentSignalsWithCandles(100, 0, 12);
+
+    expect(signal?.recent_candles).toHaveLength(12);
+    expect(signal?.recent_candles[0]?.closeTime).toBe(
+      '2026-01-01T00:15:00.000Z'
+    );
+    expect(signal?.recent_candles.at(-1)?.closeTime).toBe(
+      '2026-01-01T01:10:00.000Z'
+    );
+
     await db.close();
   });
 
