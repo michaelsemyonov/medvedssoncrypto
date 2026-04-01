@@ -475,6 +475,10 @@ export const buildApp = async () => {
     };
   });
 
+  app.get('/runner-status', async () => ({
+    runner: runner.getStatus(),
+  }));
+
   app.get('/signals', async (request) => {
     const query = parseOrReply(paginationQuerySchema, request.query);
     return {

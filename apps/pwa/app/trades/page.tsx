@@ -70,6 +70,22 @@ function formatNumber(value: unknown, digits = 4, suffix = ''): string {
   return `${number.toFixed(digits)}${suffix}`;
 }
 
+function formatPrimitiveValue(value: unknown, fallback = 'n/a'): string {
+  if (typeof value === 'string') {
+    return value.length > 0 ? value : fallback;
+  }
+
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+
+  return fallback;
+}
+
 function formatTradeDuration(start: unknown, end: unknown): string {
   const startTimestamp = toTimestamp(start);
   const endTimestamp = toTimestamp(end);
@@ -107,15 +123,15 @@ function getTradeHeadlineClassName(trade: TradeRecord): string {
 
 function renderTradeDetailItems(trade: TradeRecord) {
   const detailItems = [
-    ['Position ID', String(trade.id ?? 'n/a')],
-    ['Status', String(trade.status ?? 'n/a')],
-    ['Symbol', String(trade.symbol ?? 'n/a')],
-    ['Side', String(trade.side ?? 'n/a')],
+    ['Position ID', formatPrimitiveValue(trade.id)],
+    ['Status', formatPrimitiveValue(trade.status)],
+    ['Symbol', formatPrimitiveValue(trade.symbol)],
+    ['Side', formatPrimitiveValue(trade.side)],
     [
       'Counter Position',
-      trade.is_counter_position ? 'Yes' : 'No',
+      Boolean(trade.is_counter_position) ? 'Yes' : 'No',
     ],
-    ['Broker', String(trade.broker ?? 'n/a')],
+    ['Broker', formatPrimitiveValue(trade.broker)],
     ['Opened', formatDateTime(getTradeOpenedValue(trade))],
     ['Entry Time', formatDateTime(trade.entry_time)],
     ['Exit Time', formatDateTime(trade.exit_time)],
@@ -139,8 +155,8 @@ function renderTradeDetailItems(trade: TradeRecord) {
       ),
     ],
     ['Realized PnL', formatSignedNumber(trade.realized_pnl)],
-    ['Opened By Signal', String(trade.opened_by_signal_id ?? 'n/a')],
-    ['Closed By Signal', String(trade.closed_by_signal_id ?? 'n/a')],
+    ['Opened By Signal', formatPrimitiveValue(trade.opened_by_signal_id)],
+    ['Closed By Signal', formatPrimitiveValue(trade.closed_by_signal_id)],
     [
       'Opening Order Created',
       formatDateTime(trade.opening_order_created_at),
@@ -179,18 +195,19 @@ export default async function TradesPage() {
         <div className="trade-list" role="list">
           {trades.map((trade) => {
             const details = renderTradeDetailItems(trade);
+            const tradeId = formatPrimitiveValue(trade.id, 'trade');
 
             return (
-              <details className="trade-row" key={String(trade.id)} role="listitem">
+              <details className="trade-row" key={tradeId} role="listitem">
                 <summary className="trade-summary">
                   <span className="trade-summary-main">
                     <span className="trade-summary-symbol">
-                      {String(trade.symbol)}
+                      {formatPrimitiveValue(trade.symbol)}
                     </span>
                     <span className="pill trade-summary-side">
-                      {String(trade.side)}
+                      {formatPrimitiveValue(trade.side)}
                     </span>
-                    {trade.is_counter_position ? (
+                    {Boolean(trade.is_counter_position) ? (
                       <span className="pill pill-warn">Counter</span>
                     ) : null}
                   </span>
@@ -222,7 +239,7 @@ export default async function TradesPage() {
                 </summary>
                 <div className="trade-detail-grid">
                   {details.map(([label, value]) => (
-                    <div className="trade-detail-item" key={`${trade.id}-${label}`}>
+                    <div className="trade-detail-item" key={`${tradeId}-${label}`}>
                       <span className="trade-detail-label">{label}</span>
                       <strong>{value}</strong>
                     </div>

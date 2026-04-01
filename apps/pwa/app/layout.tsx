@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
 import Link from 'next/link';
 
+import { HeaderRunnerStatus } from '@/components/header-runner-status.tsx';
 import { HeaderSignOutButton } from '@/components/header-signout-button.tsx';
 import { ServiceWorkerRegister } from '@/components/service-worker-register.tsx';
 import './globals.css';
@@ -42,7 +43,10 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <main className="shell">
           <section className="hero">
-            <div className="eyebrow">MedvedssonCrypto</div>
+            <div className="hero-heading">
+              <div className="eyebrow">MedvedssonCrypto</div>
+              <HeaderRunnerStatus />
+            </div>
             <nav className="hero-nav">
               <Link className="hero-link" href="/">
                 Dashboard

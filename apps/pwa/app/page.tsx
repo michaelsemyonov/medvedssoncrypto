@@ -27,11 +27,6 @@ export default async function DashboardPage() {
       equity: number;
       maxDrawdownPct: number;
     };
-    runner: {
-      running: boolean;
-      lastTickCompletedAt: string | null;
-      lastError: string | null;
-    };
   }>('/dashboard', {
     activeSymbols: [],
     latestSignals: [],
@@ -45,11 +40,6 @@ export default async function DashboardPage() {
       totalRealizedPnl: 0,
       equity: 0,
       maxDrawdownPct: 0,
-    },
-    runner: {
-      running: false,
-      lastTickCompletedAt: null,
-      lastError: 'The backend API is temporarily unavailable.',
     },
   });
 
@@ -98,21 +88,6 @@ export default async function DashboardPage() {
           </div>
           <p className="muted">
             {dashboard.stats.closedTrades} closed simulated trades.
-          </p>
-        </article>
-        <article className="card">
-          <div className="eyebrow">Runner Health</div>
-          <div className="metric">
-            {dashboard.runner.running ? 'Live' : 'Stopped'}
-          </div>
-          <p className="muted">
-            {dashboard.runner.lastError
-              ? dashboard.runner.lastError
-              : `Last tick ${
-                  dashboard.runner.lastTickCompletedAt
-                    ? formatDateTime(dashboard.runner.lastTickCompletedAt)
-                    : 'not yet completed'
-                }`}
           </p>
         </article>
       </section>
