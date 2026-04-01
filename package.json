@@ -13,6 +13,7 @@
     "dev:api": "pnpm --filter @medvedsson/api dev",
     "dev:pwa": "pnpm --filter @medvedsson/pwa dev",
     "start:api": "pnpm --filter @medvedsson/api start",
+    "start:pwa": "pnpm --filter @medvedsson/pwa start",
     "build:pwa": "pnpm --filter @medvedsson/pwa build",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -20,8 +21,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "db:migrate": "node --experimental-strip-types scripts/migrate.ts",
-    "replay": "node --experimental-strip-types scripts/replay.ts"
+    "db:migrate": "pnpm --filter @medvedsson/api exec bash -lc 'set -a && source ../../.env && set +a && node --experimental-strip-types ../../scripts/migrate.ts'",
+    "replay": "pnpm --filter @medvedsson/api exec bash -lc 'set -a && source ../../.env && set +a && node --experimental-strip-types ../../scripts/replay.ts'"
+  },
+  "dependencies": {
+    "@medvedsson/db": "workspace:*",
+    "@medvedsson/execution": "workspace:*",
+    "@medvedsson/shared": "workspace:*",
+    "@medvedsson/strategy": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

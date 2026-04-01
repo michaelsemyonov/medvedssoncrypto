@@ -1,5 +1,3 @@
-import 'dotenv/config';
-
 import { createDatabase } from '@medvedsson/db';
 import { DryRunExecutionAdapter, evaluateRisk } from '@medvedsson/execution';
 import { loadConfig, timeframeToMs } from '@medvedsson/shared';

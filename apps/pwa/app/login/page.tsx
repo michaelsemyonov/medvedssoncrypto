@@ -1,5 +1,3 @@
-import { loginAction } from './actions.ts';
-
 export const dynamic = 'force-dynamic';
 
 export default async function LoginPage({
@@ -17,7 +15,7 @@ export default async function LoginPage({
       <p className="muted">
         This build uses a single shared admin password and a signed session cookie.
       </p>
-      <form action={loginAction} className="stack-lg">
+      <form action="/api/auth/login" method="post" className="stack-lg">
         <label htmlFor="password">Password</label>
         <input
           id="password"

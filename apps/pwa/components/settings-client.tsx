@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 type SettingsClientProps = {
+  apiUnavailable: boolean;
   vapidPublicKey: string;
   symbols: string[];
 };
@@ -15,7 +16,7 @@ const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
   return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
 };
 
-export function SettingsClient({ vapidPublicKey, symbols }: SettingsClientProps) {
+export function SettingsClient({ apiUnavailable, vapidPublicKey, symbols }: SettingsClientProps) {
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>(symbols);
   const [status, setStatus] = useState<string>('Idle');
 
@@ -103,6 +104,9 @@ export function SettingsClient({ vapidPublicKey, symbols }: SettingsClientProps)
       <div className="card">
         <h2>Push Notifications</h2>
         <p className="muted">Signals arrive as web push alerts. Execution stays dry-run only in V1.</p>
+        {apiUnavailable ? (
+          <p className="status-line">Settings are temporarily degraded while the backend API reconnects.</p>
+        ) : null}
         <div className="button-row">
           <button className="primary-button" onClick={() => void subscribe()} type="button">
             Subscribe

@@ -1,13 +1,23 @@
-import { fetchApi } from '@/lib/api.ts';
+import { fetchApiWithFallback } from '@/lib/api.ts';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SignalsPage() {
-  const data = await fetchApi<{ signals: Array<Record<string, unknown>> }>('/signals?limit=100');
+  const { data, unavailable } = await fetchApiWithFallback<{
+    signals: Array<Record<string, unknown>>;
+  }>('/signals?limit=100', {
+    signals: [],
+  });
 
   return (
     <section className="card">
       <h2>Recent Signals</h2>
+      {unavailable ? (
+        <p className="status-line">
+          Recent signals are temporarily unavailable while the backend API
+          reconnects.
+        </p>
+      ) : null}
       <table className="data-table">
         <thead>
           <tr>
@@ -20,22 +30,41 @@ export default async function SignalsPage() {
           </tr>
         </thead>
         <tbody>
+          {data.signals.length === 0 ? (
+            <tr className="table-empty-row">
+              <td colSpan={6} className="muted">
+                No signal data is available right now.
+              </td>
+            </tr>
+          ) : null}
           {data.signals.map((signal) => {
-            const formula = signal.formula_inputs as Record<string, number | null>;
+            const formula = signal.formula_inputs as Record<
+              string,
+              number | null
+            >;
 
             return (
               <tr key={String(signal.id)}>
-                <td>{String(signal.symbol)}</td>
-                <td>{String(signal.signal_type)}</td>
-                <td>{new Date(String(signal.candle_close_time)).toLocaleString()}</td>
-                <td>
+                <td data-label="Symbol">{String(signal.symbol)}</td>
+                <td data-label="Type">{String(signal.signal_type)}</td>
+                <td data-label="Time">
+                  {new Date(String(signal.candle_close_time)).toLocaleString()}
+                </td>
+                <td data-label="Approved">
                   <span className={signal.approved ? 'pill' : 'pill pill-warn'}>
-                    {signal.approved === null ? 'Pending' : signal.approved ? 'Approved' : 'Rejected'}
+                    {signal.approved === null
+                      ? 'Pending'
+                      : signal.approved
+                        ? 'Approved'
+                        : 'Rejected'}
                   </span>
                 </td>
-                <td>{String(signal.rejection_reason ?? signal.reason)}</td>
-                <td>
-                  r_t={formula.r_t?.toFixed?.(6) ?? 'n/a'} / B_t={formula.B_t?.toFixed?.(6) ?? 'n/a'}
+                <td data-label="Reason">
+                  {String(signal.rejection_reason ?? signal.reason)}
+                </td>
+                <td data-label="Formula">
+                  r_t={formula.r_t?.toFixed?.(6) ?? 'n/a'} / B_t=
+                  {formula.B_t?.toFixed?.(6) ?? 'n/a'}
                 </td>
               </tr>
             );

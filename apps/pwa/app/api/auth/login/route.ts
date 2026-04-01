@@ -1,7 +1,4 @@
-'use server';
-
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+import { NextResponse } from 'next/server';
 
 import { createSessionToken, SESSION_COOKIE_NAME } from '@medvedsson/shared';
 
@@ -21,19 +18,30 @@ const getAuthConfig = () => {
   };
 };
 
-export const loginAction = async (formData: FormData): Promise<void> => {
+export async function POST(request: Request) {
   const { adminPassword, sessionSecret, sessionTtlHours } = getAuthConfig();
+  const formData = await request.formData();
   const passwordValue = formData.get('password');
   const password = typeof passwordValue === 'string' ? passwordValue : '';
 
   if (password !== adminPassword) {
-    redirect('/login?error=invalid');
+    return new NextResponse(null, {
+      status: 303,
+      headers: {
+        location: '/login?error=invalid'
+      }
+    });
   }
 
-  const cookieStore = await cookies();
   const token = createSessionToken(sessionSecret, sessionTtlHours);
+  const response = new NextResponse(null, {
+    status: 303,
+    headers: {
+      location: '/'
+    }
+  });
 
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
+  response.cookies.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -41,5 +49,5 @@ export const loginAction = async (formData: FormData): Promise<void> => {
     maxAge: sessionTtlHours * 60 * 60
   });
 
-  redirect('/');
-};
+  return response;
+}

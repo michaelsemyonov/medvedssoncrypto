@@ -1,5 +1,3 @@
-import 'dotenv/config';
-
 import { createDatabase } from '@medvedsson/db';
 import { loadConfig } from '@medvedsson/shared';
 

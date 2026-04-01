@@ -1,13 +1,23 @@
-import { fetchApi } from '@/lib/api.ts';
+import { fetchApiWithFallback } from '@/lib/api.ts';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TradesPage() {
-  const data = await fetchApi<{ trades: Array<Record<string, unknown>> }>('/trades?limit=100');
+  const { data, unavailable } = await fetchApiWithFallback<{
+    trades: Array<Record<string, unknown>>;
+  }>('/trades?limit=100', {
+    trades: [],
+  });
 
   return (
     <section className="card">
       <h2>Simulated Trades</h2>
+      {unavailable ? (
+        <p className="status-line">
+          Trade history is temporarily unavailable while the backend API
+          reconnects.
+        </p>
+      ) : null}
       <table className="data-table">
         <thead>
           <tr>
@@ -21,19 +31,39 @@ export default async function TradesPage() {
           </tr>
         </thead>
         <tbody>
+          {data.trades.length === 0 ? (
+            <tr className="table-empty-row">
+              <td colSpan={7} className="muted">
+                No trade data is available right now.
+              </td>
+            </tr>
+          ) : null}
           {data.trades.map((trade) => {
             const durationMs =
-              new Date(String(trade.exit_time)).getTime() - new Date(String(trade.entry_time)).getTime();
+              new Date(String(trade.exit_time)).getTime() -
+              new Date(String(trade.entry_time)).getTime();
 
             return (
               <tr key={String(trade.id)}>
-                <td>{String(trade.symbol)}</td>
-                <td>{String(trade.side)}</td>
-                <td>{Number(trade.entry_price).toFixed(4)}</td>
-                <td>{Number(trade.exit_price ?? 0).toFixed(4)}</td>
-                <td>{Math.max(0, Math.round(durationMs / 60000))} min</td>
-                <td>{(Number(trade.entry_fee ?? 0) + Number(trade.exit_fee ?? 0)).toFixed(4)}</td>
-                <td>{Number(trade.realized_pnl ?? 0).toFixed(4)}</td>
+                <td data-label="Symbol">{String(trade.symbol)}</td>
+                <td data-label="Side">{String(trade.side)}</td>
+                <td data-label="Entry">
+                  {Number(trade.entry_price).toFixed(4)}
+                </td>
+                <td data-label="Exit">
+                  {Number(trade.exit_price ?? 0).toFixed(4)}
+                </td>
+                <td data-label="Duration">
+                  {Math.max(0, Math.round(durationMs / 60000))} min
+                </td>
+                <td data-label="Fees">
+                  {(
+                    Number(trade.entry_fee ?? 0) + Number(trade.exit_fee ?? 0)
+                  ).toFixed(4)}
+                </td>
+                <td data-label="PnL">
+                  {Number(trade.realized_pnl ?? 0).toFixed(4)}
+                </td>
               </tr>
             );
           })}

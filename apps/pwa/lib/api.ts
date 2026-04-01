@@ -52,6 +52,42 @@ export const fetchApi = async <T>(path: string): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
+export const fetchApiWithFallback = async <T>(
+  path: string,
+  fallback: T
+): Promise<{ data: T; unavailable: boolean }> => {
+  const token = await requireSession();
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}${path}`, {
+      cache: 'no-store',
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    if (response.status === 401) {
+      redirect('/login');
+    }
+
+    if (!response.ok) {
+      throw new Error(`API request failed for ${path}: ${response.status}`);
+    }
+
+    return {
+      data: (await response.json()) as T,
+      unavailable: false
+    };
+  } catch (error) {
+    console.error(`API fallback activated for ${path}.`, error);
+
+    return {
+      data: fallback,
+      unavailable: true
+    };
+  }
+};
+
 export const fetchApiSafe = async <T>(path: string, fallback: T): Promise<T> => {
   try {
     return await fetchApi<T>(path);
