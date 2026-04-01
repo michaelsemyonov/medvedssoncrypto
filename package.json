@@ -22,7 +22,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:migrate": "pnpm --filter @medvedsson/api exec bash -lc 'set -a && source ../../.env && set +a && node --experimental-strip-types ../../scripts/migrate.ts'",
-    "replay": "pnpm --filter @medvedsson/api exec bash -lc 'set -a && source ../../.env && set +a && node --experimental-strip-types ../../scripts/replay.ts'"
+    "replay": "pnpm --filter @medvedsson/api exec bash -lc 'set -a && source ../../.env && set +a && node --experimental-strip-types ../../scripts/replay.ts'",
+    "deploy:production": "bash scripts/deploy-production.sh"
   },
   "dependencies": {
     "@medvedsson/db": "workspace:*",
