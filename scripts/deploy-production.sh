@@ -60,7 +60,8 @@ pnpm install --no-frozen-lockfile
 pnpm build:pwa
 pnpm db:migrate
 
-pm2 startOrRestart ecosystem.config.cjs --update-env
+pm2 delete medvedsson-api medvedsson-pwa >/dev/null 2>&1 || true
+pm2 start ecosystem.config.cjs --update-env
 pm2 save
 pm2 status
 

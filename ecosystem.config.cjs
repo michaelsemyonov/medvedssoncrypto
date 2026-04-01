@@ -36,19 +36,20 @@ module.exports = {
   apps: [
     {
       name: 'medvedsson-api',
-      cwd: __dirname,
-      script: 'pnpm',
-      args: 'start:api',
+      cwd: path.join(__dirname, 'apps/api'),
+      script: 'node',
+      args: '--experimental-strip-types src/server.ts',
       interpreter: 'none',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        PORT: '3001'
       }
     },
     {
       name: 'medvedsson-pwa',
       cwd: __dirname,
-      script: 'pnpm',
-      args: 'start:pwa',
+      script: 'node',
+      args: 'apps/pwa/scripts/start-standalone.mjs',
       interpreter: 'none',
       env: {
         NODE_ENV: 'production',
