@@ -1353,6 +1353,11 @@ export class MedvedssonDatabase {
         trailing_giveback_min_pct: number;
         trailing_giveback_max_pct: number;
         trailing_min_locked_profit_pct: number;
+        trailing_armed: boolean;
+        trailing_current_profit_pct: number | null;
+        trailing_peak_profit_pct: number | null;
+        trailing_giveback_pct: number | null;
+        trailing_allowed_giveback_pct: number | null;
       }
     >
   > {
@@ -1392,27 +1397,89 @@ export class MedvedssonDatabase {
                   8
                 );
 
+        const trailingEnabled = parseBoolean(rawRow.trailing_enabled ?? true);
+        const activationProfitPct = Number(
+          rawRow.trailing_activation_profit_pct ?? 1.2
+        );
+        const givebackRatio = Number(rawRow.trailing_giveback_ratio ?? 0.35);
+        const givebackMinPct = Number(rawRow.trailing_giveback_min_pct ?? 0.4);
+        const givebackMaxPct = Number(rawRow.trailing_giveback_max_pct ?? 1.5);
+
+        // Compute trailing runtime status from candle history
+        let trailingArmed = false;
+        let currentProfitPct: number | null = null;
+        let peakProfitPct: number | null = null;
+        let givebackPct: number | null = null;
+        let allowedGivebackPct: number | null = null;
+
+        if (trailingEnabled && latestClose !== null) {
+          const peakRows = await query<MysqlRow>(
+            this.pool,
+            `SELECT MAX(high) AS peak_high, MIN(low) AS peak_low
+             FROM market_candles
+             WHERE symbol = ? AND close_time >= ?`,
+            [symbol, toMysqlDateTime(row.entry_time.toISOString())]
+          );
+
+          const peakHigh = peakRows[0]
+            ? Number(peakRows[0].peak_high ?? latestClose)
+            : latestClose;
+          const peakLow = peakRows[0]
+            ? Number(peakRows[0].peak_low ?? latestClose)
+            : latestClose;
+
+          if (row.side === 'LONG') {
+            currentProfitPct = round(
+              (latestClose / row.entry_price - 1) * 100,
+              4
+            );
+            const peakFavorablePrice = Math.max(peakHigh, latestClose);
+            peakProfitPct = round(
+              (peakFavorablePrice / row.entry_price - 1) * 100,
+              4
+            );
+          } else {
+            currentProfitPct = round(
+              (1 - latestClose / row.entry_price) * 100,
+              4
+            );
+            const peakFavorablePrice = Math.min(peakLow, latestClose);
+            peakProfitPct = round(
+              (1 - peakFavorablePrice / row.entry_price) * 100,
+              4
+            );
+          }
+
+          trailingArmed = peakProfitPct >= activationProfitPct;
+
+          if (trailingArmed) {
+            givebackPct = round(peakProfitPct - currentProfitPct, 4);
+            const rawAllowed = peakProfitPct * givebackRatio;
+            allowedGivebackPct = round(
+              Math.max(givebackMinPct, Math.min(givebackMaxPct, rawAllowed)),
+              4
+            );
+          }
+        }
+
         return {
           ...row,
           symbol,
           unrealized_pnl: unrealizedPnl,
           trailing_profile: String(rawRow.trailing_profile ?? 'balanced'),
-          trailing_enabled: parseBoolean(rawRow.trailing_enabled ?? true),
-          trailing_activation_profit_pct: Number(
-            rawRow.trailing_activation_profit_pct ?? 1.2
-          ),
-          trailing_giveback_ratio: Number(
-            rawRow.trailing_giveback_ratio ?? 0.35
-          ),
-          trailing_giveback_min_pct: Number(
-            rawRow.trailing_giveback_min_pct ?? 0.4
-          ),
-          trailing_giveback_max_pct: Number(
-            rawRow.trailing_giveback_max_pct ?? 1.5
-          ),
+          trailing_enabled: trailingEnabled,
+          trailing_activation_profit_pct: activationProfitPct,
+          trailing_giveback_ratio: givebackRatio,
+          trailing_giveback_min_pct: givebackMinPct,
+          trailing_giveback_max_pct: givebackMaxPct,
           trailing_min_locked_profit_pct: Number(
             rawRow.trailing_min_locked_profit_pct ?? 0.4
           ),
+          trailing_armed: trailingArmed,
+          trailing_current_profit_pct: currentProfitPct,
+          trailing_peak_profit_pct: peakProfitPct,
+          trailing_giveback_pct: givebackPct,
+          trailing_allowed_giveback_pct: allowedGivebackPct,
         };
       })
     );

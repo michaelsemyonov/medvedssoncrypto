@@ -30,6 +30,11 @@ type PositionPageItem = {
   trailing_giveback_min_pct: number;
   trailing_giveback_max_pct: number;
   trailing_min_locked_profit_pct: number;
+  trailing_armed: boolean;
+  trailing_current_profit_pct: number | null;
+  trailing_peak_profit_pct: number | null;
+  trailing_giveback_pct: number | null;
+  trailing_allowed_giveback_pct: number | null;
 };
 
 const formatSignedValue = (value: number | null): string =>
@@ -98,12 +103,19 @@ async function PositionChart({
   );
 }
 
+const formatSignedPct = (value: number | null): string => {
+  if (value === null) return 'n/a';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+};
+
 function TrailingDetails({ position }: { position: PositionPageItem }) {
+  const armed = position.trailing_armed;
+
   return (
     <details className="trade-row" style={{ marginTop: '8px' }}>
       <summary
         className="trade-summary"
-        style={{ gridTemplateColumns: '1fr auto' }}
+        style={{ gridTemplateColumns: '1fr auto auto auto' }}
       >
         <span className="trade-summary-main">
           <span
@@ -112,20 +124,66 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
           >
             Trailing Profit
           </span>
-          <span
-            className={position.trailing_enabled ? 'pill' : 'pill pill-warn'}
-          >
-            {position.trailing_enabled ? 'Enabled' : 'Disabled'}
-          </span>
+          {!position.trailing_enabled ? (
+            <span className="pill pill-warn">Disabled</span>
+          ) : armed ? (
+            <span className="pill">Armed</span>
+          ) : (
+            <span className="pill pill-warn">Not Armed</span>
+          )}
         </span>
         <span className="trade-summary-value">
           <span className="trade-summary-label">Profile</span>
           <strong>{formatProfileLabel(position.trailing_profile)}</strong>
         </span>
+        <span className="trade-summary-value">
+          <span className="trade-summary-label">Peak Profit</span>
+          <strong>{formatSignedPct(position.trailing_peak_profit_pct)}</strong>
+        </span>
+        <span className="trade-summary-value">
+          <span className="trade-summary-label">Giveback</span>
+          <strong>
+            {position.trailing_giveback_pct !== null
+              ? formatPct(position.trailing_giveback_pct)
+              : 'n/a'}
+          </strong>
+        </span>
       </summary>
       <div className="trade-detail-wrap">
         <table className="data-table trade-detail-table">
           <tbody>
+            <tr>
+              <th scope="row">Trailing Armed</th>
+              <td>{armed ? 'Yes' : 'No'}</td>
+            </tr>
+            <tr>
+              <th scope="row">Current Profit</th>
+              <td>{formatSignedPct(position.trailing_current_profit_pct)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Peak Profit</th>
+              <td>{formatSignedPct(position.trailing_peak_profit_pct)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Giveback</th>
+              <td>
+                {position.trailing_giveback_pct !== null
+                  ? formatPct(position.trailing_giveback_pct)
+                  : 'n/a'}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Allowed Giveback</th>
+              <td>
+                {position.trailing_allowed_giveback_pct !== null
+                  ? formatPct(position.trailing_allowed_giveback_pct)
+                  : 'n/a'}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Activation Threshold</th>
+              <td>{formatPct(position.trailing_activation_profit_pct)}</td>
+            </tr>
             <tr>
               <th scope="row">Profile</th>
               <td>{formatProfileLabel(position.trailing_profile)}</td>
@@ -133,10 +191,6 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
             <tr>
               <th scope="row">Enabled</th>
               <td>{position.trailing_enabled ? 'Yes' : 'No'}</td>
-            </tr>
-            <tr>
-              <th scope="row">Activation Profit</th>
-              <td>{formatPct(position.trailing_activation_profit_pct)}</td>
             </tr>
             <tr>
               <th scope="row">Giveback Ratio</th>
