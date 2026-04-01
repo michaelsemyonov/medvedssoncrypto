@@ -1,5 +1,5 @@
 import { fetchApiWithFallback } from '@/lib/api.ts';
-import { formatDateTime } from '@/lib/datetime.ts';
+import { formatDateTime, formatDurationBetween } from '@/lib/datetime.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,8 @@ function compareTradesDesc(
   right: Record<string, unknown>
 ): number {
   const entryTimeDiff =
-    toTimestamp(right.entry_time) - toTimestamp(left.entry_time);
+    toTimestamp(right.opened_at ?? right.entry_time) -
+    toTimestamp(left.opened_at ?? left.entry_time);
 
   if (entryTimeDiff !== 0) {
     return entryTimeDiff;
@@ -76,14 +77,13 @@ export default async function TradesPage() {
             </tr>
           ) : null}
           {trades.map((trade) => {
-            const durationMs =
-              toTimestamp(trade.exit_time) - toTimestamp(trade.entry_time);
-
             return (
               <tr key={String(trade.id)}>
                 <td data-label="Symbol">{String(trade.symbol)}</td>
                 <td data-label="Side">{String(trade.side)}</td>
-                <td data-label="Opened">{formatDateTime(trade.entry_time)}</td>
+                <td data-label="Opened">
+                  {formatDateTime(trade.opened_at ?? trade.entry_time)}
+                </td>
                 <td data-label="Entry">
                   {Number(trade.entry_price).toFixed(4)}
                 </td>
@@ -91,7 +91,10 @@ export default async function TradesPage() {
                   {Number(trade.exit_price ?? 0).toFixed(4)}
                 </td>
                 <td data-label="Duration">
-                  {Math.max(0, Math.round(durationMs / 60000))} min
+                  {formatDurationBetween(
+                    trade.opened_at ?? trade.entry_time,
+                    trade.exit_time
+                  )}
                 </td>
                 <td data-label="Fees">
                   {(

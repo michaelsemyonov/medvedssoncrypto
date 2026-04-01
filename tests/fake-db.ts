@@ -85,6 +85,11 @@ type PositionRow = {
   updated_at: Date;
 };
 
+type RecentTradeRow = PositionRow & {
+  symbol: string;
+  opened_at: Date;
+};
+
 type SimulatedOrderRow = {
   id: string;
   strategy_run_id: string;
@@ -134,13 +139,13 @@ type PushSubscriptionRow = PushSubscriptionRecord & {
 };
 
 const compareClosedPositionsDesc = (
-  left: Pick<PositionRow, 'entry_time' | 'updated_at' | 'created_at'>,
-  right: Pick<PositionRow, 'entry_time' | 'updated_at' | 'created_at'>
+  left: Pick<RecentTradeRow, 'opened_at' | 'updated_at' | 'created_at'>,
+  right: Pick<RecentTradeRow, 'opened_at' | 'updated_at' | 'created_at'>
 ): number => {
-  const entryTimeDiff = right.entry_time.getTime() - left.entry_time.getTime();
+  const openedAtDiff = right.opened_at.getTime() - left.opened_at.getTime();
 
-  if (entryTimeDiff !== 0) {
-    return entryTimeDiff;
+  if (openedAtDiff !== 0) {
+    return openedAtDiff;
   }
 
   const updatedAtDiff = right.updated_at.getTime() - left.updated_at.getTime();
@@ -151,6 +156,15 @@ const compareClosedPositionsDesc = (
 
   return right.created_at.getTime() - left.created_at.getTime();
 };
+
+const resolveTradeOpenedAt = (
+  position: PositionRow,
+  openingSignalTime: Date | null
+): Date =>
+  openingSignalTime !== null &&
+  openingSignalTime.getTime() > position.entry_time.getTime()
+    ? openingSignalTime
+    : position.entry_time;
 
 export class FakeMedvedssonDatabase {
   private runs: RunRow[] = [];
@@ -847,19 +861,24 @@ export class FakeMedvedssonDatabase {
       }));
   }
 
-  async getRecentTrades(
-    limit = 100
-  ): Promise<Array<PositionRow & { symbol: string }>> {
+  async getRecentTrades(limit = 100): Promise<RecentTradeRow[]> {
     return this.positions
       .filter((item) => item.status === 'CLOSED')
+      .map((position) => {
+        const openingSignalTime =
+          this.signals.find((item) => item.id === position.opened_by_signal_id)
+            ?.candle_close_time ?? null;
+
+        return {
+          ...position,
+          symbol:
+            this.symbols.find((item) => item.id === position.symbol_id)
+              ?.symbol ?? 'UNKNOWN',
+          opened_at: resolveTradeOpenedAt(position, openingSignalTime),
+        };
+      })
       .sort(compareClosedPositionsDesc)
-      .slice(0, limit)
-      .map((position) => ({
-        ...position,
-        symbol:
-          this.symbols.find((item) => item.id === position.symbol_id)?.symbol ??
-          'UNKNOWN',
-      }));
+      .slice(0, limit);
   }
 
   async getStatsSummary(

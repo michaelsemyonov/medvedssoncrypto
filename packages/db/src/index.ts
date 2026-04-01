@@ -99,6 +99,11 @@ type PositionRow = {
   open_slot?: string | null;
 };
 
+type RecentTradeRow = PositionRow & {
+  symbol: string;
+  opened_at: Date;
+};
+
 type SimulatedOrderRow = {
   id: string;
   strategy_run_id: string;
@@ -297,6 +302,15 @@ const normalizePositionRow = (row: MysqlRow): PositionRow => ({
       ? null
       : String(row.open_slot),
 });
+
+const resolveTradeOpenedAt = (
+  position: PositionRow,
+  openingSignalTime: Date | null
+): Date =>
+  openingSignalTime !== null &&
+  openingSignalTime.getTime() > position.entry_time.getTime()
+    ? openingSignalTime
+    : position.entry_time;
 
 const normalizeSimulatedOrderRow = (row: MysqlRow): SimulatedOrderRow => ({
   id: String(row.id),
@@ -1344,25 +1358,31 @@ export class MedvedssonDatabase {
     }));
   }
 
-  async getRecentTrades(
-    limit = 100,
-    offset = 0
-  ): Promise<Array<PositionRow & { symbol: string }>> {
+  async getRecentTrades(limit = 100, offset = 0): Promise<RecentTradeRow[]> {
     const rows = await query<MysqlRow>(
       this.pool,
-      `SELECT p.*, s.symbol
+      `SELECT p.*, s.symbol, os.candle_close_time AS opening_signal_time
        FROM positions p
        INNER JOIN symbols s ON s.id = p.symbol_id
+       INNER JOIN signals os ON os.id = p.opened_by_signal_id
        WHERE p.status = 'CLOSED'
-       ORDER BY p.entry_time DESC, p.updated_at DESC, p.created_at DESC
+       ORDER BY GREATEST(p.entry_time, os.candle_close_time) DESC,
+                p.updated_at DESC,
+                p.created_at DESC
        LIMIT ? OFFSET ?`,
       [limit, offset]
     );
 
-    return rows.map((row) => ({
-      ...normalizePositionRow(row),
-      symbol: String(row.symbol),
-    }));
+    return rows.map((row) => {
+      const position = normalizePositionRow(row);
+      const openingSignalTime = parseDate(row.opening_signal_time);
+
+      return {
+        ...position,
+        symbol: String(row.symbol),
+        opened_at: resolveTradeOpenedAt(position, openingSignalTime),
+      };
+    });
   }
 
   async getStatsSummary(

@@ -1,4 +1,7 @@
-import { formatDateTime } from '../../apps/pwa/lib/datetime.ts';
+import {
+  formatDateTime,
+  formatDurationBetween,
+} from '../../apps/pwa/lib/datetime.ts';
 
 describe('formatDateTime', () => {
   it('renders timestamps as YYYY-MM-DD HH:mm', () => {
@@ -13,5 +16,29 @@ describe('formatDateTime', () => {
 
   it('returns the original string for invalid values', () => {
     expect(formatDateTime('not-a-date')).toBe('not-a-date');
+  });
+
+  it('formats elapsed time from the provided timestamps', () => {
+    expect(
+      formatDurationBetween(
+        '2026-04-01T09:05:00.000Z',
+        '2026-04-01T15:05:00.000Z'
+      )
+    ).toBe('6h 0m');
+  });
+
+  it('includes seconds when the duration is not on a minute boundary', () => {
+    expect(
+      formatDurationBetween(
+        '2026-04-01T09:05:00.000Z',
+        '2026-04-01T09:06:09.000Z'
+      )
+    ).toBe('1m 9s');
+  });
+
+  it('returns the fallback for missing duration values', () => {
+    expect(formatDurationBetween(null, '2026-04-01T09:06:09.000Z')).toBe(
+      'n/a'
+    );
   });
 });
