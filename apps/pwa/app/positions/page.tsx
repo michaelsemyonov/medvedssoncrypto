@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 
 import { CandleChart } from '@/components/candle-chart.tsx';
+import { ExchangeBadge } from '@/components/exchange-badge.tsx';
 import { fetchApiWithFallback } from '@/lib/api.ts';
 import { formatDateTime } from '@/lib/datetime.ts';
 
@@ -15,9 +16,11 @@ type PositionPageCandle = {
 };
 
 type PositionPageItem = {
+  broker: 'bybit' | 'okx';
   entry_price: number;
   entry_time: string;
   id: string;
+  is_counter_position: boolean;
   notional_usdt: number;
   qty: number;
   side: 'LONG' | 'SHORT';
@@ -58,6 +61,47 @@ const formatProfileLabel = (profile: string): string => {
 const formatPct = (value: number): string => `${value.toFixed(2)}%`;
 
 const formatRatio = (value: number): string => value.toFixed(2);
+
+function PositionOverviewTable({ position }: { position: PositionPageItem }) {
+  return (
+    <div className="position-table-wrap">
+      <table className="position-info-table">
+        <tbody>
+          <tr>
+            <th scope="row">Entry Time</th>
+            <td>{formatDateTime(position.entry_time)}</td>
+          </tr>
+          <tr>
+            <th scope="row">Entry Price</th>
+            <td>{position.entry_price.toFixed(4)}</td>
+          </tr>
+          <tr>
+            <th scope="row">Qty</th>
+            <td>{position.qty.toFixed(6)}</td>
+          </tr>
+          <tr>
+            <th scope="row">Amount</th>
+            <td>{formatUsdtValue(position.notional_usdt)}</td>
+          </tr>
+          <tr>
+            <th scope="row">Unrealized PnL</th>
+            <td>{formatSignedValue(position.unrealized_pnl)}</td>
+          </tr>
+          <tr>
+            <th scope="row">Position Type</th>
+            <td>{position.is_counter_position ? 'Counter' : 'Primary'}</td>
+          </tr>
+          <tr>
+            <th scope="row">Exchange</th>
+            <td>
+              <ExchangeBadge exchange={position.broker} />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function PositionChartFallback() {
   return (
@@ -112,49 +156,33 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
   const armed = position.trailing_armed;
 
   return (
-    <details className="trade-row" style={{ marginTop: '8px' }}>
-      <summary
-        className="trade-summary"
-        style={{ gridTemplateColumns: '1fr auto auto auto' }}
-      >
-        <span className="trade-summary-main">
-          <span
-            className="trade-summary-symbol"
-            style={{ fontSize: '0.88rem' }}
-          >
-            Trailing Profit
-          </span>
-          {!position.trailing_enabled ? (
-            <span className="pill pill-warn">Disabled</span>
-          ) : armed ? (
-            <span className="pill">Armed</span>
-          ) : (
-            <span className="pill pill-warn">Not Armed</span>
-          )}
-        </span>
-        <span className="trade-summary-value">
-          <span className="trade-summary-label">Profile</span>
-          <strong>{formatProfileLabel(position.trailing_profile)}</strong>
-        </span>
-        <span className="trade-summary-value">
-          <span className="trade-summary-label">Peak Profit</span>
-          <strong>{formatSignedPct(position.trailing_peak_profit_pct)}</strong>
-        </span>
-        <span className="trade-summary-value">
-          <span className="trade-summary-label">Giveback</span>
-          <strong>
-            {position.trailing_giveback_pct !== null
-              ? formatPct(position.trailing_giveback_pct)
-              : 'n/a'}
-          </strong>
-        </span>
-      </summary>
-      <div className="trade-detail-wrap">
-        <table className="data-table trade-detail-table">
+    <section className="position-subcard">
+      <div className="position-subhead">
+        <h4>Trailing Profit</h4>
+        {!position.trailing_enabled ? (
+          <span className="pill pill-warn">Disabled</span>
+        ) : armed ? (
+          <span className="pill">Armed</span>
+        ) : (
+          <span className="pill pill-warn">Not Armed</span>
+        )}
+      </div>
+      <div className="position-table-wrap">
+        <table className="position-info-table position-info-table-compact">
           <tbody>
             <tr>
-              <th scope="row">Trailing Armed</th>
-              <td>{armed ? 'Yes' : 'No'}</td>
+              <th scope="row">Status</th>
+              <td>
+                {!position.trailing_enabled
+                  ? 'Disabled'
+                  : armed
+                    ? 'Armed'
+                    : 'Not Armed'}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Profile</th>
+              <td>{formatProfileLabel(position.trailing_profile)}</td>
             </tr>
             <tr>
               <th scope="row">Current Profit</th>
@@ -185,14 +213,6 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
               <td>{formatPct(position.trailing_activation_profit_pct)}</td>
             </tr>
             <tr>
-              <th scope="row">Profile</th>
-              <td>{formatProfileLabel(position.trailing_profile)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Enabled</th>
-              <td>{position.trailing_enabled ? 'Yes' : 'No'}</td>
-            </tr>
-            <tr>
               <th scope="row">Giveback Ratio</th>
               <td>{formatRatio(position.trailing_giveback_ratio)}</td>
             </tr>
@@ -211,7 +231,7 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
           </tbody>
         </table>
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -241,36 +261,21 @@ export default async function PositionsPage() {
                 <div className="signal-head">
                   <div>
                     <p className="eyebrow">Open Position</p>
-                    <h3 className="signal-symbol">{position.symbol}</h3>
+                    <div className="position-title-row">
+                      <h3 className="signal-symbol">{position.symbol}</h3>
+                      <ExchangeBadge compact exchange={position.broker} />
+                    </div>
                   </div>
-                  <span className={getSideClassName(position.side)}>
-                    {position.side}
-                  </span>
-                </div>
-                <div className="signal-grid">
-                  <div className="signal-field">
-                    <span className="signal-field-label">Entry Time</span>
-                    <strong>{formatDateTime(position.entry_time)}</strong>
-                  </div>
-                  <div className="signal-field">
-                    <span className="signal-field-label">Entry Price</span>
-                    <strong>{position.entry_price.toFixed(4)}</strong>
-                  </div>
-                  <div className="signal-field">
-                    <span className="signal-field-label">Qty</span>
-                    <strong>{position.qty.toFixed(6)}</strong>
-                  </div>
-                  <div className="signal-field">
-                    <span className="signal-field-label">Amount</span>
-                    <strong>{formatUsdtValue(position.notional_usdt)}</strong>
-                  </div>
-                  <div className="signal-field">
-                    <span className="signal-field-label">Unrealized PnL</span>
-                    <strong>
-                      {formatSignedValue(position.unrealized_pnl)}
-                    </strong>
+                  <div className="position-pill-row">
+                    {position.is_counter_position ? (
+                      <span className="pill pill-warn">Counter</span>
+                    ) : null}
+                    <span className={getSideClassName(position.side)}>
+                      {position.side}
+                    </span>
                   </div>
                 </div>
+                <PositionOverviewTable position={position} />
               </div>
               <TrailingDetails position={position} />
               <Suspense fallback={<PositionChartFallback />}>
