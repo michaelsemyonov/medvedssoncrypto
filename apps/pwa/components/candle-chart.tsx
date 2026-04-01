@@ -14,6 +14,7 @@ type CandleChartProps = {
   emptyMessage: string;
   footerLabel: string;
   highlightLastCandle?: boolean;
+  referencePrice?: number;
   summary: string;
   title: string;
 };
@@ -53,6 +54,7 @@ export function CandleChart({
   emptyMessage,
   footerLabel,
   highlightLastCandle = false,
+  referencePrice,
   summary,
   title,
 }: CandleChartProps) {
@@ -66,8 +68,9 @@ export function CandleChart({
 
   const highs = candles.map((candle) => candle.high);
   const lows = candles.map((candle) => candle.low);
-  const minPrice = Math.min(...lows);
-  const maxPrice = Math.max(...highs);
+  const baselinePrice = referencePrice ?? candles.at(-1)!.close;
+  const minPrice = Math.min(...lows, baselinePrice);
+  const maxPrice = Math.max(...highs, baselinePrice);
   const priceRange = Math.max(maxPrice - minPrice, maxPrice * 0.01, 1e-9);
   const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const innerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
@@ -107,8 +110,8 @@ export function CandleChart({
           className="signal-chart-baseline"
           x1={CHART_PADDING.left}
           x2={CHART_WIDTH - CHART_PADDING.right}
-          y1={yForPrice(lastCandle.close)}
-          y2={yForPrice(lastCandle.close)}
+          y1={yForPrice(baselinePrice)}
+          y2={yForPrice(baselinePrice)}
         />
         {candles.map((candle, index) => {
           const centerX =

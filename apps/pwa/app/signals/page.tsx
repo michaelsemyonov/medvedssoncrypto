@@ -15,6 +15,7 @@ type SignalPageCandle = {
 type SignalPageItem = {
   approved: boolean | null;
   candle_close_time: string;
+  created_at: string;
   formula_inputs: Record<string, number | null>;
   id: string;
   reason: string;
@@ -78,7 +79,7 @@ export default async function SignalsPage() {
                 <div className="signal-grid">
                   <div className="signal-field">
                     <span className="signal-field-label">Time</span>
-                    <strong>{formatDateTime(signal.candle_close_time)}</strong>
+                    <strong>{formatDateTime(signal.created_at)}</strong>
                   </div>
                   <div className="signal-field">
                     <span className="signal-field-label">Reason</span>

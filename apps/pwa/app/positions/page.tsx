@@ -86,6 +86,7 @@ export default async function PositionsPage() {
                 emptyMessage="Real-time candles are temporarily unavailable for this position."
                 footerLabel="Live exchange candles"
                 summary={`${position.recent_candles.length}/24 candles`}
+                referencePrice={position.entry_price}
                 title="Latest 360 min"
               />
             </article>

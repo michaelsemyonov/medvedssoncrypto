@@ -1441,17 +1441,19 @@ export class MedvedssonDatabase {
       symbol: string;
       signal_type: string;
       candle_close_time: Date;
+      created_at: Date;
       approved: boolean | null;
     }>
   > {
     const rows = await query<MysqlRow>(
       this.pool,
-      `SELECT symbol, signal_type, candle_close_time, approved
+      `SELECT symbol, signal_type, candle_close_time, created_at, approved
        FROM (
          SELECT
            symbol,
            signal_type,
            candle_close_time,
+           created_at,
            approved,
            ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY candle_close_time DESC, created_at DESC) AS rn
          FROM signals
@@ -1463,6 +1465,7 @@ export class MedvedssonDatabase {
       symbol: String(row.symbol),
       signal_type: String(row.signal_type),
       candle_close_time: parseDate(row.candle_close_time)!,
+      created_at: parseDate(row.created_at)!,
       approved:
         row.approved === null || row.approved === undefined
           ? null

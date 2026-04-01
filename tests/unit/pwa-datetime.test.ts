@@ -5,9 +5,9 @@ import {
 } from '../../apps/pwa/lib/datetime.ts';
 
 describe('formatDateTime', () => {
-  it('renders timestamps as YYYY-MM-DD HH:mm', () => {
-    expect(formatDateTime(new Date(2026, 3, 1, 9, 5, 45))).toBe(
-      '2026-04-01 09:05'
+  it('renders UTC timestamps as YYYY-MM-DD HH:mm in Europe/Stockholm', () => {
+    expect(formatDateTime('2026-04-01T09:05:45.000Z')).toBe(
+      '2026-04-01 11:05'
     );
   });
 
@@ -19,8 +19,12 @@ describe('formatDateTime', () => {
     expect(formatDateTime('not-a-date')).toBe('not-a-date');
   });
 
-  it('renders time values as HH:mm in the local timezone', () => {
-    expect(formatTime(new Date(2026, 3, 1, 9, 5, 45))).toBe('09:05');
+  it('treats timezone-less timestamps as UTC before converting to Europe/Stockholm', () => {
+    expect(formatDateTime('2026-04-01 09:05:45')).toBe('2026-04-01 11:05');
+  });
+
+  it('renders time values as HH:mm in Europe/Stockholm', () => {
+    expect(formatTime('2026-04-01T09:05:45.000Z')).toBe('11:05');
   });
 
   it('formats elapsed time from the provided timestamps', () => {

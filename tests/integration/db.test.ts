@@ -334,6 +334,64 @@ describe('database integration', () => {
     }
   });
 
+  it('returns latest signals by symbol with their creation timestamp', async () => {
+    vi.useFakeTimers();
+
+    const db = createFakeDatabase();
+    const config = buildTestConfig();
+
+    try {
+      await db.migrate();
+      const run = await db.startRun(config);
+      const [symbol] = await db.replaceActiveSymbols(
+        config.exchange,
+        config.symbols
+      );
+
+      vi.setSystemTime(new Date('2026-01-01T00:06:00.000Z'));
+      await db.insertSignal({
+        runId: run.id,
+        symbolId: symbol!.id,
+        exchange: config.exchange,
+        symbol: symbol!.symbol,
+        timeframe: config.timeframe,
+        signal: {
+          signalType: 'LONG_ENTRY',
+          candleCloseTime: '2026-01-01T00:05:00.000Z',
+          signalStrength: 1,
+          formulaInputs: {
+            r_t: 0.05,
+            B_t: 0,
+            N: 96,
+            k: 5,
+            H: 72,
+            threshold: 0.04,
+            comparison: 'LONG',
+          },
+          indicators: {
+            return: 0.05,
+            baselineMoveMagnitude: 0,
+          },
+          features: {},
+          reason: 'Momentum breakout.',
+        },
+      });
+
+      const [latest] = await db.getLatestSignalsBySymbol();
+
+      expect(latest?.symbol).toBe(symbol!.symbol);
+      expect(latest?.candle_close_time.toISOString()).toBe(
+        '2026-01-01T00:05:00.000Z'
+      );
+      expect(latest?.created_at.toISOString()).toBe(
+        '2026-01-01T00:06:00.000Z'
+      );
+    } finally {
+      vi.useRealTimers();
+      await db.close();
+    }
+  });
+
   it('uses the opening signal time when a stored trade entry predates its signal', async () => {
     const db = createFakeDatabase();
     const config = buildTestConfig();

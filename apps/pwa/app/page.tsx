@@ -10,6 +10,7 @@ export default async function DashboardPage() {
       symbol: string;
       signal_type: string;
       candle_close_time: string;
+      created_at: string;
       approved: boolean | null;
     }>;
     openPositionsCount: number;
@@ -123,7 +124,7 @@ export default async function DashboardPage() {
               <tr key={item.symbol}>
                 <td data-label="Symbol">{item.symbol}</td>
                 <td data-label="Signal">{item.signal_type}</td>
-                <td data-label="Time">{formatDateTime(item.candle_close_time)}</td>
+                <td data-label="Time">{formatDateTime(item.created_at)}</td>
                 <td data-label="Approval">
                   <span className={item.approved ? 'pill' : 'pill pill-warn'}>
                     {item.approved === null

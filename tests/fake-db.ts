@@ -948,6 +948,7 @@ export class FakeMedvedssonDatabase {
       symbol: string;
       signal_type: string;
       candle_close_time: Date;
+      created_at: Date;
       approved: boolean | null;
     }>
   > {
@@ -966,6 +967,7 @@ export class FakeMedvedssonDatabase {
       symbol: signal.symbol,
       signal_type: signal.signal_type,
       candle_close_time: signal.candle_close_time,
+      created_at: signal.created_at,
       approved: signal.approved,
     }));
   }

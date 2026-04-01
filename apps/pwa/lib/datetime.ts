@@ -1,4 +1,55 @@
-const pad = (value: number): string => String(value).padStart(2, '0');
+const STOCKHOLM_TIME_ZONE = 'Europe/Stockholm';
+const DATE_WITH_TIMEZONE_SUFFIX = /(Z|[+-]\d{2}:\d{2}|[+-]\d{4})$/i;
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const stockholmDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+const normalizeDateInput = (value: string): string => {
+  const text = value.trim();
+
+  if (
+    text.length === 0 ||
+    DATE_WITH_TIMEZONE_SUFFIX.test(text)
+  ) {
+    return text;
+  }
+
+  if (DATE_ONLY_PATTERN.test(text)) {
+    return `${text}T00:00:00.000Z`;
+  }
+
+  if (text.includes('T')) {
+    return `${text}Z`;
+  }
+
+  if (text.includes(' ')) {
+    return `${text.replace(' ', 'T')}Z`;
+  }
+
+  return text;
+};
+
+const getDateTimeParts = (
+  date: Date
+): Record<'year' | 'month' | 'day' | 'hour' | 'minute', string> => {
+  const parts = stockholmDateTimeFormatter.formatToParts(date);
+
+  return {
+    year: parts.find((part) => part.type === 'year')?.value ?? '0000',
+    month: parts.find((part) => part.type === 'month')?.value ?? '00',
+    day: parts.find((part) => part.type === 'day')?.value ?? '00',
+    hour: parts.find((part) => part.type === 'hour')?.value ?? '00',
+    minute: parts.find((part) => part.type === 'minute')?.value ?? '00',
+  };
+};
 
 const toDate = (value: unknown): Date | null => {
   if (value === null || value === undefined || value === '') {
@@ -13,7 +64,12 @@ const toDate = (value: unknown): Date | null => {
     return null;
   }
 
-  const date = value instanceof Date ? value : new Date(value);
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(
+          typeof value === 'string' ? normalizeDateInput(value) : value
+        );
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
@@ -24,7 +80,8 @@ export function formatDateTime(value: unknown, fallback = 'n/a'): string {
     return typeof value === 'string' && value.length > 0 ? value : fallback;
   }
 
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const parts = getDateTimeParts(date);
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 export function formatTime(value: unknown, fallback = 'n/a'): string {
@@ -34,7 +91,8 @@ export function formatTime(value: unknown, fallback = 'n/a'): string {
     return typeof value === 'string' && value.length > 0 ? value : fallback;
   }
 
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const parts = getDateTimeParts(date);
+  return `${parts.hour}:${parts.minute}`;
 }
 
 export function formatDurationBetween(
