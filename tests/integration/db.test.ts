@@ -393,96 +393,111 @@ describe('database integration', () => {
   });
 
   it('uses the opening signal time when a stored trade entry predates its signal', async () => {
+    vi.useFakeTimers();
+
     const db = createFakeDatabase();
     const config = buildTestConfig();
 
-    await db.migrate();
-    const run = await db.startRun(config);
-    const [symbol] = await db.replaceActiveSymbols(
-      config.exchange,
-      config.symbols
-    );
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
 
-    const signal = await db.insertSignal({
-      runId: run.id,
-      symbolId: symbol!.id,
-      exchange: config.exchange,
-      symbol: symbol!.symbol,
-      timeframe: config.timeframe,
-      signal: {
-        signalType: 'LONG_ENTRY',
-        candleCloseTime: '2026-01-01T00:10:00.000Z',
-        signalStrength: 1,
-        formulaInputs: {
-          r_t: 0.05,
-          B_t: 0,
-          N: 96,
-          k: 5,
-          H: 72,
-          threshold: 0.04,
-          comparison: 'LONG',
+      await db.migrate();
+      const run = await db.startRun(config);
+      const [symbol] = await db.replaceActiveSymbols(
+        config.exchange,
+        config.symbols
+      );
+
+      const signal = await db.insertSignal({
+        runId: run.id,
+        symbolId: symbol!.id,
+        exchange: config.exchange,
+        symbol: symbol!.symbol,
+        timeframe: config.timeframe,
+        signal: {
+          signalType: 'LONG_ENTRY',
+          candleCloseTime: '2026-01-01T00:10:00.000Z',
+          signalStrength: 1,
+          formulaInputs: {
+            r_t: 0.05,
+            B_t: 0,
+            N: 96,
+            k: 5,
+            H: 72,
+            threshold: 0.04,
+            comparison: 'LONG',
+          },
+          indicators: {
+            return: 0.05,
+            baselineMoveMagnitude: 0,
+          },
+          features: {},
+          reason: 'Momentum breakout.',
         },
-        indicators: {
-          return: 0.05,
-          baselineMoveMagnitude: 0,
+      });
+
+      const openOrder = await db.createPendingOrder({
+        runId: run.id,
+        signalId: signal.id,
+        symbolId: symbol!.id,
+        orderType: 'MARKET',
+        side: 'BUY',
+        intent: 'OPEN_POSITION',
+        referencePrice: 100,
+        qty: 1,
+        notionalUsdt: 100,
+        slippageBps: 0,
+        feeRate: 0.001,
+        feeAmount: 0.1,
+        fillModel: 'next_open',
+        meta: {},
+      });
+      await db.fillPendingOrder(
+        openOrder!.id,
+        100,
+        '2026-01-01T00:05:00.000Z'
+      );
+
+      const [openPosition] = await db.getOpenPositions(run.id);
+      const closeOrder = await db.createPendingOrder({
+        runId: run.id,
+        signalId: 'close-signal',
+        symbolId: symbol!.id,
+        orderType: 'MARKET',
+        side: 'SELL',
+        intent: 'CLOSE_POSITION',
+        referencePrice: 101,
+        qty: 1,
+        notionalUsdt: 101,
+        slippageBps: 0,
+        feeRate: 0.001,
+        feeAmount: 0.101,
+        fillModel: 'next_open',
+        positionId: openPosition!.id,
+        meta: {
+          position_id: openPosition!.id,
         },
-        features: {},
-        reason: 'Momentum breakout.',
-      },
-    });
+      });
+      await db.fillPendingOrder(
+        closeOrder!.id,
+        101,
+        '2026-01-01T00:15:00.000Z'
+      );
 
-    const openOrder = await db.createPendingOrder({
-      runId: run.id,
-      signalId: signal.id,
-      symbolId: symbol!.id,
-      orderType: 'MARKET',
-      side: 'BUY',
-      intent: 'OPEN_POSITION',
-      referencePrice: 100,
-      qty: 1,
-      notionalUsdt: 100,
-      slippageBps: 0,
-      feeRate: 0.001,
-      feeAmount: 0.1,
-      fillModel: 'next_open',
-      meta: {},
-    });
-    await db.fillPendingOrder(openOrder!.id, 100, '2026-01-01T00:05:00.000Z');
+      const [trade] = await db.getRecentTrades();
 
-    const [openPosition] = await db.getOpenPositions(run.id);
-    const closeOrder = await db.createPendingOrder({
-      runId: run.id,
-      signalId: 'close-signal',
-      symbolId: symbol!.id,
-      orderType: 'MARKET',
-      side: 'SELL',
-      intent: 'CLOSE_POSITION',
-      referencePrice: 101,
-      qty: 1,
-      notionalUsdt: 101,
-      slippageBps: 0,
-      feeRate: 0.001,
-      feeAmount: 0.101,
-      fillModel: 'next_open',
-      positionId: openPosition!.id,
-      meta: {
-        position_id: openPosition!.id,
-      },
-    });
-    await db.fillPendingOrder(closeOrder!.id, 101, '2026-01-01T00:15:00.000Z');
-
-    const [trade] = await db.getRecentTrades();
-
-    expect(trade?.entry_time.toISOString()).toBe('2026-01-01T00:05:00.000Z');
-    expect(trade?.opened_at.toISOString()).toBe('2026-01-01T00:10:00.000Z');
-    expect(trade?.opening_order_created_at.toISOString()).toBe(
-      openOrder!.created_at.toISOString()
-    );
-    expect(trade?.opening_order_filled_at?.toISOString()).toBe(
-      '2026-01-01T00:05:00.000Z'
-    );
-
-    await db.close();
+      expect(trade?.entry_time.toISOString()).toBe('2026-01-01T00:05:00.000Z');
+      expect(trade?.opened_at.toISOString()).toBe('2026-01-01T00:10:00.000Z');
+      expect(trade?.opening_order_created_at.toISOString()).toBe(
+        openOrder!.created_at.toISOString()
+      );
+      expect(trade?.opening_order_filled_at?.toISOString()).toBe(
+        '2026-01-01T00:00:00.000Z'
+      );
+    } finally {
+      vi.useRealTimers();
+      await db.close();
+    }
   });
 
   it('returns entry subscriptions even when legacy symbol filters do not match', async () => {

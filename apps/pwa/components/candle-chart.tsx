@@ -23,10 +23,11 @@ const CHART_WIDTH = 320;
 const CHART_HEIGHT = 140;
 const CHART_PADDING = {
   top: 12,
-  right: 10,
+  right: 56,
   bottom: 24,
   left: 10,
 };
+const Y_AXIS_TICK_COUNT: number = 3;
 
 const formatPrice = (value: number): string => {
   if (!Number.isFinite(value)) {
@@ -83,6 +84,23 @@ export function CandleChart({
   const lastCandle = candles.at(-1)!;
   const firstLabel = formatTime(candles[0]!.closeTime);
   const lastLabel = formatTime(lastCandle.closeTime);
+  const plotRightX = CHART_WIDTH - CHART_PADDING.right;
+  const axisLabelX = plotRightX + 6;
+  const yAxisTicks = Array.from({ length: Y_AXIS_TICK_COUNT }, (_, index) => {
+    const ratio =
+      Y_AXIS_TICK_COUNT === 1 ? 0 : index / (Y_AXIS_TICK_COUNT - 1);
+    const value = maxPrice - priceRange * ratio;
+
+    return {
+      value,
+      y: yForPrice(value),
+    };
+  });
+  const baselineY = yForPrice(baselinePrice);
+  const baselineLabelY = Math.min(
+    Math.max(baselineY - 4, CHART_PADDING.top + 10),
+    CHART_PADDING.top + innerHeight - 2
+  );
 
   return (
     <div className="signal-chart">
@@ -106,13 +124,40 @@ export function CandleChart({
             y={CHART_PADDING.top - 4}
           />
         ) : null}
+        {yAxisTicks.map((tick, index) => (
+          <g key={`${tick.value}-${index}`}>
+            <line
+              className="signal-chart-gridline"
+              x1={CHART_PADDING.left}
+              x2={plotRightX}
+              y1={tick.y}
+              y2={tick.y}
+            />
+            <text
+              className="signal-chart-axis-label"
+              x={axisLabelX}
+              y={tick.y + 4}
+            >
+              {formatPrice(tick.value)}
+            </text>
+          </g>
+        ))}
         <line
           className="signal-chart-baseline"
           x1={CHART_PADDING.left}
-          x2={CHART_WIDTH - CHART_PADDING.right}
-          y1={yForPrice(baselinePrice)}
-          y2={yForPrice(baselinePrice)}
+          x2={plotRightX}
+          y1={baselineY}
+          y2={baselineY}
         />
+        <text
+          className="signal-chart-reference-label"
+          x={axisLabelX}
+          y={baselineLabelY}
+        >
+          {referencePrice === undefined
+            ? formatPrice(baselinePrice)
+            : `Entry ${formatPrice(baselinePrice)}`}
+        </text>
         {candles.map((candle, index) => {
           const centerX =
             CHART_PADDING.left + slotWidth * index + slotWidth / 2;
@@ -153,7 +198,7 @@ export function CandleChart({
         </text>
         <text
           className="signal-chart-label signal-chart-label-end"
-          x={CHART_WIDTH - CHART_PADDING.right}
+          x={plotRightX}
           y={CHART_HEIGHT - 6}
         >
           {lastLabel}

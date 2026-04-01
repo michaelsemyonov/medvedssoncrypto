@@ -67,6 +67,8 @@ type SettingsClientProps = {
   defaults: SymbolDraft;
 };
 
+type SettingsTab = 'symbols' | 'pushes';
+
 const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -496,6 +498,7 @@ export function SettingsClient({
   symbols: initialSymbols,
   defaults,
 }: SettingsClientProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('symbols');
   const [status, setStatus] = useState<string>('Idle');
   const [symbols, setSymbols] = useState<SymbolDraft[]>(
     sortBySymbol(initialSymbols.map(mapApiSymbolToDraft))
@@ -680,11 +683,62 @@ export function SettingsClient({
 
   return (
     <div className="stack-lg">
-      <section className="card">
-        <h2>Symbol Settings</h2>
+      <section className="card settings-shell">
+        <div className="settings-toolbar">
+          <div>
+            <h2>Settings</h2>
+            <p className="muted">
+              Manage symbol configurations and web push delivery for the runner.
+            </p>
+          </div>
+          <button
+            className="secondary-button settings-signout"
+            onClick={() => void logout()}
+            type="button"
+          >
+            Sign Out
+          </button>
+        </div>
+        <div
+          aria-label="Settings sections"
+          className="settings-tablist"
+          role="tablist"
+        >
+          <button
+            aria-controls="settings-panel-symbols"
+            aria-selected={activeTab === 'symbols'}
+            className={
+              activeTab === 'symbols'
+                ? 'settings-tab settings-tab-active'
+                : 'settings-tab'
+            }
+            id="settings-tab-symbols"
+            onClick={() => setActiveTab('symbols')}
+            role="tab"
+            type="button"
+          >
+            Symbols
+          </button>
+          <button
+            aria-controls="settings-panel-pushes"
+            aria-selected={activeTab === 'pushes'}
+            className={
+              activeTab === 'pushes'
+                ? 'settings-tab settings-tab-active'
+                : 'settings-tab'
+            }
+            id="settings-tab-pushes"
+            onClick={() => setActiveTab('pushes')}
+            role="tab"
+            type="button"
+          >
+            Pushes
+          </button>
+        </div>
         <p className="muted">
-          Symbols now own their exchange, strategy, execution, and risk settings
-          directly in the database. Changes here are what the runner will use.
+          {activeTab === 'symbols'
+            ? 'Symbols now own their exchange, strategy, execution, and risk settings directly in the database. Changes here are what the runner will use.'
+            : 'Approved signals across all symbols arrive as web push alerts.'}
         </p>
         {apiUnavailable ? (
           <p className="status-line">
@@ -693,71 +747,80 @@ export function SettingsClient({
         ) : null}
       </section>
 
-      <SymbolEditor
-        title="Add Symbol"
-        submitLabel="Add Symbol"
-        status={symbolStatus.new}
-        saving={savingKey === 'new'}
-        draft={newSymbol}
-        onChange={updateNewSymbol}
-        onSubmit={() => void createSymbol()}
-      />
+      {activeTab === 'symbols' ? (
+        <div
+          aria-labelledby="settings-tab-symbols"
+          id="settings-panel-symbols"
+          role="tabpanel"
+        >
+          <div className="stack-lg">
+            <SymbolEditor
+              title="Add Symbol"
+              submitLabel="Add Symbol"
+              status={symbolStatus.new}
+              saving={savingKey === 'new'}
+              draft={newSymbol}
+              onChange={updateNewSymbol}
+              onSubmit={() => void createSymbol()}
+            />
 
-      {symbols.length === 0 ? (
-        <section className="card">
-          <p className="muted">No symbols are configured yet.</p>
-        </section>
-      ) : null}
+            {symbols.length === 0 ? (
+              <section className="card">
+                <p className="muted">No symbols are configured yet.</p>
+              </section>
+            ) : null}
 
-      {symbols.map((symbol) => (
-        <SymbolEditor
-          key={symbol.id}
-          title="Configured Symbol"
-          submitLabel="Save Settings"
-          status={symbol.id ? symbolStatus[symbol.id] : undefined}
-          saving={savingKey === symbol.id}
-          draft={symbol}
-          onChange={(key, value) => {
-            if (!symbol.id) {
-              return;
-            }
+            {symbols.map((symbol) => (
+              <SymbolEditor
+                key={symbol.id}
+                title="Configured Symbol"
+                submitLabel="Save Settings"
+                status={symbol.id ? symbolStatus[symbol.id] : undefined}
+                saving={savingKey === symbol.id}
+                draft={symbol}
+                onChange={(key, value) => {
+                  if (!symbol.id) {
+                    return;
+                  }
 
-            updateSymbolDraft(symbol.id, key, value);
-          }}
-          onSubmit={() => void saveExistingSymbol(symbol)}
-        />
-      ))}
-
-      <section className="card">
-        <h2>Push Notifications</h2>
-        <p className="muted">
-          Approved signals across all symbols arrive as web push alerts.
-        </p>
-        <div className="button-row">
-          <button
-            className="primary-button"
-            onClick={() => void subscribe()}
-            type="button"
-          >
-            Subscribe
-          </button>
-          <button
-            className="secondary-button"
-            onClick={() => void unsubscribe()}
-            type="button"
-          >
-            Unsubscribe
-          </button>
-          <button
-            className="secondary-button"
-            onClick={() => void logout()}
-            type="button"
-          >
-            Sign Out
-          </button>
+                  updateSymbolDraft(symbol.id, key, value);
+                }}
+                onSubmit={() => void saveExistingSymbol(symbol)}
+              />
+            ))}
+          </div>
         </div>
-        <p className="status-line">{status}</p>
-      </section>
+      ) : (
+        <section
+          aria-labelledby="settings-tab-pushes"
+          className="card"
+          id="settings-panel-pushes"
+          role="tabpanel"
+        >
+          <h2>Push Notifications</h2>
+          <p className="muted">
+            Subscribe this device to receive entry, exit, and runner error
+            alerts.
+          </p>
+          <div className="button-row">
+            <button
+              className="primary-button"
+              onClick={() => void subscribe()}
+              type="button"
+            >
+              Subscribe
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => void unsubscribe()}
+              type="button"
+            >
+              Unsubscribe
+            </button>
+          </div>
+          <p className="status-line">{status}</p>
+        </section>
+      )}
     </div>
   );
 }

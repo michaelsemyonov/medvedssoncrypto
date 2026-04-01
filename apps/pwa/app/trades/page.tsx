@@ -100,7 +100,7 @@ export default async function TradesPage() {
                 </td>
                 <td data-label="Duration">
                   {formatDurationBetween(
-                    trade.opening_order_filled_at ?? trade.entry_time,
+                    trade.entry_time ?? trade.opening_order_filled_at,
                     trade.exit_time
                   )}
                 </td>

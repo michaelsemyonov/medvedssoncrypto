@@ -1456,13 +1456,14 @@ export class MedvedssonDatabase {
         order.side,
         order.slippage_bps
       );
+      const recordedAt = toMysqlDateTime(new Date());
 
       await execute(
         client,
         `UPDATE simulated_orders
          SET fill_price = ?, filled_at = ?, status = 'FILLED'
          WHERE id = ?`,
-        [finalFillPrice, toMysqlDateTime(fillTime), order.id]
+        [finalFillPrice, recordedAt, order.id]
       );
 
       if (order.intent === 'OPEN_POSITION') {

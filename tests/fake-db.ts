@@ -1003,8 +1003,9 @@ export class FakeMedvedssonDatabase {
       return;
     }
 
+    const recordedAt = new Date();
     order.fill_price = fillPrice;
-    order.filled_at = new Date(fillTime);
+    order.filled_at = recordedAt;
     order.status = 'FILLED';
 
     if (order.intent === 'OPEN_POSITION') {
