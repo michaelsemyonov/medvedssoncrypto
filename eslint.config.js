@@ -1,6 +1,10 @@
 import js from '@eslint/js';
+import nextPlugin from '@next/eslint-plugin-next';
 import globals from 'globals';
+import path from 'node:path';
 import tseslint from 'typescript-eslint';
+
+const pwaRootDir = path.join(import.meta.dirname, 'apps/pwa');
 
 export default tseslint.config(
   {
@@ -22,6 +26,29 @@ export default tseslint.config(
       globals: {
         ...globals.node,
         ...globals.browser
+      }
+    }
+  },
+  {
+    files: ['eslint.config.js'],
+    plugins: {
+      '@next/next': nextPlugin
+    },
+    settings: {
+      next: {
+        rootDir: pwaRootDir
+      }
+    },
+    rules: {
+      '@next/next/no-html-link-for-pages': 'off'
+    }
+  },
+  {
+    ...nextPlugin.flatConfig.coreWebVitals,
+    files: ['apps/pwa/**/*.{js,jsx,ts,tsx}'],
+    settings: {
+      next: {
+        rootDir: pwaRootDir
       }
     }
   },

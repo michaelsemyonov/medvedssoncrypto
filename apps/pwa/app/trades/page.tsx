@@ -2,6 +2,19 @@ import { fetchApiWithFallback } from '@/lib/api.ts';
 
 export const dynamic = 'force-dynamic';
 
+function toTimestamp(value: unknown): number {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const timestamp = new Date(value).getTime();
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+  }
+
+  return 0;
+}
+
 export default async function TradesPage() {
   const { data, unavailable } = await fetchApiWithFallback<{
     trades: Array<Record<string, unknown>>;
@@ -9,8 +22,8 @@ export default async function TradesPage() {
     trades: [],
   });
   const trades = [...data.trades].sort((left, right) => {
-    const leftExitTime = new Date(String(left.exit_time ?? 0)).getTime();
-    const rightExitTime = new Date(String(right.exit_time ?? 0)).getTime();
+    const leftExitTime = toTimestamp(left.exit_time);
+    const rightExitTime = toTimestamp(right.exit_time);
     return rightExitTime - leftExitTime;
   });
 
@@ -45,8 +58,7 @@ export default async function TradesPage() {
           ) : null}
           {trades.map((trade) => {
             const durationMs =
-              new Date(String(trade.exit_time)).getTime() -
-              new Date(String(trade.entry_time)).getTime();
+              toTimestamp(trade.exit_time) - toTimestamp(trade.entry_time);
 
             return (
               <tr key={String(trade.id)}>
