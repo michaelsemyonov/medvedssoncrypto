@@ -8,3 +8,4 @@ dist
 *.log
 apps/pwa/.next
 apps/pwa/out
+apps/pwa/.env.production
