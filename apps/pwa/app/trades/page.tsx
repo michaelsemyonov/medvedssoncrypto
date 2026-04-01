@@ -3,6 +3,12 @@ import { formatDateTime, formatDurationBetween } from '@/lib/datetime.ts';
 
 export const dynamic = 'force-dynamic';
 
+function getTradeOpenedValue(trade: Record<string, unknown>): unknown {
+  return (
+    trade.opening_order_filled_at ?? trade.opened_at ?? trade.entry_time
+  );
+}
+
 function toTimestamp(value: unknown): number {
   if (value instanceof Date) {
     return value.getTime();
@@ -21,12 +27,8 @@ function compareTradesDesc(
   right: Record<string, unknown>
 ): number {
   const entryTimeDiff =
-    toTimestamp(
-      right.opening_order_created_at ?? right.opened_at ?? right.entry_time
-    ) -
-    toTimestamp(
-      left.opening_order_created_at ?? left.opened_at ?? left.entry_time
-    );
+    toTimestamp(getTradeOpenedValue(right)) -
+    toTimestamp(getTradeOpenedValue(left));
 
   if (entryTimeDiff !== 0) {
     return entryTimeDiff;
@@ -86,11 +88,7 @@ export default async function TradesPage() {
                 <td data-label="Symbol">{String(trade.symbol)}</td>
                 <td data-label="Side">{String(trade.side)}</td>
                 <td data-label="Opened">
-                  {formatDateTime(
-                    trade.opening_order_created_at ??
-                      trade.opened_at ??
-                      trade.entry_time
-                  )}
+                  {formatDateTime(getTradeOpenedValue(trade))}
                 </td>
                 <td data-label="Entry">
                   {Number(trade.entry_price).toFixed(4)}

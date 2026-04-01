@@ -492,7 +492,7 @@ describe('database integration', () => {
         openOrder!.created_at.toISOString()
       );
       expect(trade?.opening_order_filled_at?.toISOString()).toBe(
-        '2026-01-01T00:00:00.000Z'
+        '2026-01-01T00:05:00.000Z'
       );
     } finally {
       vi.useRealTimers();

@@ -1003,7 +1003,7 @@ export class FakeMedvedssonDatabase {
       return;
     }
 
-    const recordedAt = new Date();
+    const recordedAt = new Date(fillTime);
     order.fill_price = fillPrice;
     order.filled_at = recordedAt;
     order.status = 'FILLED';

@@ -492,8 +492,8 @@ const normalizePushSubscriptionRow = (row: MysqlRow): PushSubscriptionRow => ({
   updated_at: parseDate(row.updated_at)!,
 });
 
-export const createPool = (connectionString: string): DbPoolLike =>
-  mysql.createPool({
+export const createPool = (connectionString: string): DbPoolLike => {
+  const pool = mysql.createPool({
     uri: connectionString,
     connectionLimit: 10,
     timezone: 'Z',
@@ -501,6 +501,13 @@ export const createPool = (connectionString: string): DbPoolLike =>
     decimalNumbers: true,
     dateStrings: true,
   });
+
+  pool.on('connection', (connection) => {
+    connection.query("SET time_zone = '+00:00'");
+  });
+
+  return pool;
+};
 
 export class MedvedssonDatabase {
   readonly pool: DbPoolLike;
@@ -1456,7 +1463,7 @@ export class MedvedssonDatabase {
         order.side,
         order.slippage_bps
       );
-      const recordedAt = toMysqlDateTime(new Date());
+      const recordedAt = toMysqlDateTime(fillTime);
 
       await execute(
         client,

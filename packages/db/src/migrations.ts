@@ -229,4 +229,24 @@ export const MIGRATIONS: Array<{ id: string; sql: string }> = [
       ADD COLUMN poll_interval_ms INT NOT NULL DEFAULT 15000 AFTER max_consecutive_losses;
     `,
   },
+  {
+    id: '004_backfill_simulated_order_fill_times',
+    sql: `
+      UPDATE simulated_orders oo
+      INNER JOIN positions p ON p.opened_by_signal_id = oo.signal_id
+      SET oo.filled_at = p.entry_time
+      WHERE oo.intent = 'OPEN_POSITION'
+        AND oo.status = 'FILLED'
+        AND p.entry_time IS NOT NULL
+        AND (oo.filled_at IS NULL OR oo.filled_at <> p.entry_time);
+
+      UPDATE simulated_orders oo
+      INNER JOIN positions p ON p.closed_by_signal_id = oo.signal_id
+      SET oo.filled_at = p.exit_time
+      WHERE oo.intent = 'CLOSE_POSITION'
+        AND oo.status = 'FILLED'
+        AND p.exit_time IS NOT NULL
+        AND (oo.filled_at IS NULL OR oo.filled_at <> p.exit_time);
+    `,
+  },
 ];
