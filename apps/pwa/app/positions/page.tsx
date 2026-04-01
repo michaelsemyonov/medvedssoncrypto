@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+
 import { CandleChart } from '@/components/candle-chart.tsx';
 import { fetchApiWithFallback } from '@/lib/api.ts';
 import { formatDateTime } from '@/lib/datetime.ts';
@@ -18,7 +20,6 @@ type PositionPageItem = {
   id: string;
   notional_usdt: number;
   qty: number;
-  recent_candles: PositionPageCandle[];
   side: 'LONG' | 'SHORT';
   symbol: string;
   unrealized_pnl: number | null;
@@ -31,6 +32,50 @@ const formatUsdtValue = (value: number): string => `${value.toFixed(2)} USDT`;
 
 const getSideClassName = (side: PositionPageItem['side']): string =>
   side === 'LONG' ? 'pill' : 'pill pill-warn';
+
+function PositionChartFallback() {
+  return (
+    <div className="signal-chart signal-chart-empty">
+      <div className="signal-chart-head">
+        <span>Latest 360 min</span>
+        <span>Loading</span>
+      </div>
+      <p className="muted">Loading live candles for this position.</p>
+    </div>
+  );
+}
+
+async function PositionChart({
+  entryPrice,
+  positionId,
+  symbol,
+}: {
+  entryPrice: number;
+  positionId: string;
+  symbol: string;
+}) {
+  const { data, unavailable } = await fetchApiWithFallback<{
+    recent_candles: PositionPageCandle[];
+  }>(`/positions/${positionId}/candles`, {
+    recent_candles: [],
+  });
+
+  return (
+    <CandleChart
+      ariaLabel={`Real-time candlestick chart for the latest 360 minutes on ${symbol}`}
+      candles={data.recent_candles}
+      emptyMessage={
+        unavailable
+          ? 'Real-time candles are temporarily unavailable while the backend API reconnects.'
+          : 'Real-time candles are temporarily unavailable for this position.'
+      }
+      footerLabel="Live exchange candles"
+      summary={`${data.recent_candles.length}/24 candles`}
+      referencePrice={entryPrice}
+      title="Latest 360 min"
+    />
+  );
+}
 
 export default async function PositionsPage() {
   const { data, unavailable } = await fetchApiWithFallback<{
@@ -87,15 +132,13 @@ export default async function PositionsPage() {
                   </div>
                 </div>
               </div>
-              <CandleChart
-                ariaLabel={`Real-time candlestick chart for the latest 360 minutes on ${position.symbol}`}
-                candles={position.recent_candles}
-                emptyMessage="Real-time candles are temporarily unavailable for this position."
-                footerLabel="Live exchange candles"
-                summary={`${position.recent_candles.length}/24 candles`}
-                referencePrice={position.entry_price}
-                title="Latest 360 min"
-              />
+              <Suspense fallback={<PositionChartFallback />}>
+                <PositionChart
+                  entryPrice={position.entry_price}
+                  positionId={position.id}
+                  symbol={position.symbol}
+                />
+              </Suspense>
             </article>
           ))}
         </div>

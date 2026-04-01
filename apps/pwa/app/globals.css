@@ -177,6 +177,14 @@ a {
   margin-top: 18px;
 }
 
+.signals-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+}
+
 .signal-card {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 340px);
@@ -552,6 +560,11 @@ a {
   color: var(--accent);
 }
 
+.chip-disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 @media (max-width: 720px) {
   .shell {
     padding: 0 12px 40px;
@@ -564,6 +577,11 @@ a {
 
   .settings-signout {
     width: 100%;
+  }
+
+  .signals-pagination {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .signal-card {

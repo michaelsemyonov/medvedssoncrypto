@@ -446,7 +446,7 @@ export const buildApp = async () => {
     };
   });
 
-  app.get('/positions', async (request) => {
+  app.get('/positions', async () => {
     const run = await db.getActiveRun();
 
     if (!run) {
@@ -455,50 +455,64 @@ export const buildApp = async () => {
       };
     }
 
-    const positions = await db.getOpenPositions(run.id);
-    const positionsWithCandles = await Promise.all(
-      positions.map(async (position) => {
-        const symbol = await db.getSymbolById(position.symbol_id);
+    return {
+      positions: await db.getOpenPositions(run.id),
+    };
+  });
 
-        try {
-          return {
-            ...position,
-            recent_candles: await getMarketDataAdapter({
-              exchange:
-                symbol?.exchange ?? config.defaultSymbolSettings.exchange,
-              exchangeTimeoutMs:
-                symbol?.exchange_timeout_ms ??
-                config.defaultSymbolSettings.exchangeTimeoutMs,
-              exchangeRateLimitMs:
-                symbol?.exchange_rate_limit_ms ??
-                config.defaultSymbolSettings.exchangeRateLimitMs,
-            }).fetchRecentCandles(
-              position.symbol,
-              POSITION_CHART_TIMEFRAME,
-              POSITION_CHART_CANDLE_COUNT
-            ),
-          };
-        } catch (error) {
-          request.log.warn(
-            {
-              err: error,
-              symbol: position.symbol,
-              timeframe: POSITION_CHART_TIMEFRAME,
-            },
-            'Open position chart candle fetch failed.'
-          );
+  app.get('/positions/:id/candles', async (request) => {
+    const params = parseOrReply(symbolIdParamsSchema, request.params);
+    const run = await db.getActiveRun();
 
-          return {
-            ...position,
-            recent_candles: [],
-          };
-        }
-      })
+    if (!run) {
+      return {
+        recent_candles: [],
+      };
+    }
+
+    const position = (await db.getOpenPositions(run.id)).find(
+      (item) => item.id === params.id
     );
 
-    return {
-      positions: positionsWithCandles,
-    };
+    if (!position) {
+      return {
+        recent_candles: [],
+      };
+    }
+
+    const symbol = await db.getSymbolById(position.symbol_id);
+
+    try {
+      return {
+        recent_candles: await getMarketDataAdapter({
+          exchange: symbol?.exchange ?? config.defaultSymbolSettings.exchange,
+          exchangeTimeoutMs:
+            symbol?.exchange_timeout_ms ??
+            config.defaultSymbolSettings.exchangeTimeoutMs,
+          exchangeRateLimitMs:
+            symbol?.exchange_rate_limit_ms ??
+            config.defaultSymbolSettings.exchangeRateLimitMs,
+        }).fetchRecentCandles(
+          position.symbol,
+          POSITION_CHART_TIMEFRAME,
+          POSITION_CHART_CANDLE_COUNT
+        ),
+      };
+    } catch (error) {
+      request.log.warn(
+        {
+          err: error,
+          positionId: position.id,
+          symbol: position.symbol,
+          timeframe: POSITION_CHART_TIMEFRAME,
+        },
+        'Open position chart candle fetch failed.'
+      );
+
+      return {
+        recent_candles: [],
+      };
+    }
   });
 
   app.get('/trades', async (request) => {
