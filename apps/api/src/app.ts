@@ -10,6 +10,7 @@ import {
   normalizeSymbol,
   parseCookieHeader,
   SESSION_COOKIE_NAME,
+  type ExchangeName,
   type Timeframe,
   type PushSubscriptionRecord,
   verifySessionToken,
@@ -28,7 +29,39 @@ const POSITION_CHART_CANDLE_COUNT = 24;
 const POSITION_CHART_TIMEFRAME: Timeframe = '15m';
 
 const symbolUpdateSchema = z.object({
+  exchange: z.enum(['bybit', 'binance']).default('bybit'),
   symbols: z.array(z.string().min(1)).default([]),
+});
+
+const symbolSettingsSchema = z.object({
+  symbol: z.string().min(1),
+  active: z.boolean().default(true),
+  exchange: z.enum(['bybit', 'binance']),
+  exchangeTimeoutMs: z.coerce.number().int().min(1),
+  exchangeRateLimitMs: z.coerce.number().int().min(0),
+  timeframe: z.enum(['5m', '15m']),
+  dryRun: z.boolean(),
+  allowShort: z.boolean(),
+  strategyKey: z.string().min(1),
+  strategyVersion: z.string().min(1),
+  signalN: z.coerce.number().int().min(1),
+  signalK: z.coerce.number().min(0),
+  signalHBars: z.coerce.number().int().min(1),
+  fillModel: z.literal('next_open'),
+  feeRate: z.coerce.number().min(0),
+  slippageBps: z.coerce.number().min(0),
+  positionSizingMode: z.literal('fixed_usdt'),
+  fixedUsdtPerTrade: z.coerce.number().min(0),
+  equityStartUsdt: z.coerce.number().min(0),
+  maxOpenPositions: z.coerce.number().int().min(1),
+  cooldownBars: z.coerce.number().int().min(0),
+  maxDailyDrawdownPct: z.coerce.number().min(0),
+  maxConsecutiveLosses: z.coerce.number().int().min(0),
+  pollIntervalMs: z.coerce.number().int().min(100),
+});
+
+const symbolIdParamsSchema = z.object({
+  id: z.string().min(1),
 });
 
 const pushSubscribeSchema = z.object({
@@ -65,6 +98,38 @@ const parseOrReply = <TSchema extends z.ZodTypeAny>(
 
   return parsed.data as z.infer<TSchema>;
 };
+
+const toSymbolWriteModel = (input: z.infer<typeof symbolSettingsSchema>) => ({
+  symbol: normalizeSymbol(input.symbol),
+  active: input.active,
+  exchange: input.exchange,
+  exchangeTimeoutMs: input.exchangeTimeoutMs,
+  exchangeRateLimitMs: input.exchangeRateLimitMs,
+  timeframe: input.timeframe,
+  dryRun: input.dryRun,
+  allowShort: input.allowShort,
+  strategyKey: input.strategyKey,
+  strategyVersion: input.strategyVersion,
+  signal: {
+    n: input.signalN,
+    k: input.signalK,
+    hBars: input.signalHBars,
+    timeframe: input.timeframe,
+  },
+  execution: {
+    fillModel: input.fillModel,
+    positionSizingMode: input.positionSizingMode,
+    feeRate: input.feeRate,
+    slippageBps: input.slippageBps,
+    fixedUsdtPerTrade: input.fixedUsdtPerTrade,
+    equityStartUsdt: input.equityStartUsdt,
+  },
+  maxOpenPositions: input.maxOpenPositions,
+  cooldownBars: input.cooldownBars,
+  maxDailyDrawdownPct: input.maxDailyDrawdownPct,
+  maxConsecutiveLosses: input.maxConsecutiveLosses,
+  pollIntervalMs: input.pollIntervalMs,
+});
 
 export const buildApp = async () => {
   const config = loadConfig();
@@ -123,23 +188,49 @@ export const buildApp = async () => {
 
   const db = createDatabase(config.databaseUrl);
   await db.migrate();
-  await db.replaceActiveSymbols(config.exchange, config.symbols);
-
-  const marketData = new MarketDataAdapter(
-    {
-      exchange: config.exchange,
-      timeoutMs: config.exchangeTimeoutMs,
-      rateLimitMs: config.exchangeRateLimitMs,
-    },
-    logger
+  await db.ensureDefaultSymbols(
+    config.defaultSymbols,
+    config.defaultSymbolSettings
   );
+
+  const marketDataAdapters = new Map<string, MarketDataAdapter>();
+  const getMarketDataAdapter = (params: {
+    exchange: ExchangeName;
+    exchangeTimeoutMs: number;
+    exchangeRateLimitMs: number;
+  }): MarketDataAdapter => {
+    const key = `${params.exchange}:${params.exchangeTimeoutMs}:${params.exchangeRateLimitMs}`;
+    const existing = marketDataAdapters.get(key);
+
+    if (existing) {
+      return existing;
+    }
+
+    const adapter = new MarketDataAdapter(
+      {
+        exchange: params.exchange,
+        timeoutMs: params.exchangeTimeoutMs,
+        rateLimitMs: params.exchangeRateLimitMs,
+      },
+      logger
+    );
+
+    marketDataAdapters.set(key, adapter);
+    return adapter;
+  };
+  const getStartingEquity = async (): Promise<number> => {
+    const symbols = (await db.listSymbols()).filter((symbol) => symbol.active);
+    return symbols.reduce(
+      (sum, symbol) => sum + Number(symbol.equity_start_usdt),
+      0
+    );
+  };
   const notifications = new NotificationService(config, db, logger, () => {
     notificationFailuresCounter.inc();
   });
   const runner = new TradingRunner({
     config,
     db,
-    marketData,
     notifications,
     logger,
   });
@@ -216,11 +307,29 @@ export const buildApp = async () => {
     symbols: await db.listSymbols(),
   }));
 
+  app.post('/symbols', async (request) => {
+    const body = parseOrReply(symbolSettingsSchema, request.body);
+    return {
+      symbol: await db.createSymbol(toSymbolWriteModel(body)),
+    };
+  });
+
   app.put('/symbols', async (request) => {
     const body = parseOrReply(symbolUpdateSchema, request.body);
     const symbols = body.symbols.map(normalizeSymbol);
-    const updated = await db.replaceActiveSymbols(config.exchange, symbols);
+    const updated = await db.replaceActiveSymbols(body.exchange, symbols, {
+      ...config.defaultSymbolSettings,
+      exchange: body.exchange,
+    });
     return { symbols: updated };
+  });
+
+  app.put('/symbols/:id', async (request) => {
+    const params = parseOrReply(symbolIdParamsSchema, request.params);
+    const body = parseOrReply(symbolSettingsSchema, request.body);
+    return {
+      symbol: await db.updateSymbol(params.id, toSymbolWriteModel(body)),
+    };
   });
 
   app.get('/signals/recent', async (request) => {
@@ -253,6 +362,7 @@ export const buildApp = async () => {
 
   app.get('/stats/summary', async () => {
     const runs = await db.listRuns();
+    const startingEquity = await getStartingEquity();
 
     if (runs.length === 0) {
       return {
@@ -261,14 +371,14 @@ export const buildApp = async () => {
           winRate: 0,
           averageTradeReturn: 0,
           totalRealizedPnl: 0,
-          equity: config.execution.equityStartUsdt,
+          equity: startingEquity,
           maxDrawdownPct: 0,
         },
       };
     }
 
     return {
-      stats: await db.getStatsSummary(null, config.execution.equityStartUsdt),
+      stats: await db.getStatsSummary(null, startingEquity),
     };
   });
 
@@ -298,21 +408,25 @@ export const buildApp = async () => {
   app.get('/dashboard', async () => {
     const activeRun = await db.getActiveRun();
     const runs = await db.listRuns();
+    const symbols = await db.listSymbols();
     const positions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
+    const startingEquity = symbols
+      .filter((symbol) => symbol.active)
+      .reduce((sum, symbol) => sum + Number(symbol.equity_start_usdt), 0);
     const stats =
       runs.length > 0
-        ? await db.getStatsSummary(null, config.execution.equityStartUsdt)
+        ? await db.getStatsSummary(null, startingEquity)
         : {
             closedTrades: 0,
             winRate: 0,
             averageTradeReturn: 0,
             totalRealizedPnl: 0,
-            equity: config.execution.equityStartUsdt,
+            equity: startingEquity,
             maxDrawdownPct: 0,
           };
 
     return {
-      activeSymbols: (await db.listSymbols()).filter((symbol) => symbol.active),
+      activeSymbols: symbols.filter((symbol) => symbol.active),
       latestSignals: await db.getLatestSignalsBySymbol(),
       openPositionsCount: positions.length,
       stats,
@@ -344,10 +458,21 @@ export const buildApp = async () => {
     const positions = await db.getOpenPositions(run.id);
     const positionsWithCandles = await Promise.all(
       positions.map(async (position) => {
+        const symbol = await db.getSymbolById(position.symbol_id);
+
         try {
           return {
             ...position,
-            recent_candles: await marketData.fetchRecentCandles(
+            recent_candles: await getMarketDataAdapter({
+              exchange:
+                symbol?.exchange ?? config.defaultSymbolSettings.exchange,
+              exchangeTimeoutMs:
+                symbol?.exchange_timeout_ms ??
+                config.defaultSymbolSettings.exchangeTimeoutMs,
+              exchangeRateLimitMs:
+                symbol?.exchange_rate_limit_ms ??
+                config.defaultSymbolSettings.exchangeRateLimitMs,
+            }).fetchRecentCandles(
               position.symbol,
               POSITION_CHART_TIMEFRAME,
               POSITION_CHART_CANDLE_COUNT
@@ -386,11 +511,35 @@ export const buildApp = async () => {
 
   app.get('/settings', async () => ({
     vapidPublicKey: config.webPushVapidPublicKey,
-    exchange: config.exchange,
-    timeframe: config.timeframe,
-    strategyKey: config.strategyKey,
-    strategyVersion: config.strategyVersion,
-    dryRun: config.dryRun,
+    symbols: await db.listSymbols(),
+    defaults: {
+      symbol: '',
+      active: true,
+      exchange: config.defaultSymbolSettings.exchange,
+      exchangeTimeoutMs: config.defaultSymbolSettings.exchangeTimeoutMs,
+      exchangeRateLimitMs: config.defaultSymbolSettings.exchangeRateLimitMs,
+      timeframe: config.defaultSymbolSettings.timeframe,
+      dryRun: config.defaultSymbolSettings.dryRun,
+      allowShort: config.defaultSymbolSettings.allowShort,
+      strategyKey: config.defaultSymbolSettings.strategyKey,
+      strategyVersion: config.defaultSymbolSettings.strategyVersion,
+      signalN: config.defaultSymbolSettings.signal.n,
+      signalK: config.defaultSymbolSettings.signal.k,
+      signalHBars: config.defaultSymbolSettings.signal.hBars,
+      fillModel: config.defaultSymbolSettings.execution.fillModel,
+      feeRate: config.defaultSymbolSettings.execution.feeRate,
+      slippageBps: config.defaultSymbolSettings.execution.slippageBps,
+      positionSizingMode:
+        config.defaultSymbolSettings.execution.positionSizingMode,
+      fixedUsdtPerTrade:
+        config.defaultSymbolSettings.execution.fixedUsdtPerTrade,
+      equityStartUsdt: config.defaultSymbolSettings.execution.equityStartUsdt,
+      maxOpenPositions: config.defaultSymbolSettings.maxOpenPositions,
+      cooldownBars: config.defaultSymbolSettings.cooldownBars,
+      maxDailyDrawdownPct: config.defaultSymbolSettings.maxDailyDrawdownPct,
+      maxConsecutiveLosses: config.defaultSymbolSettings.maxConsecutiveLosses,
+      pollIntervalMs: config.defaultSymbolSettings.pollIntervalMs,
+    },
   }));
 
   app.addHook('onClose', async () => {

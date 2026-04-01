@@ -10,7 +10,11 @@ import {
   mergeCandles,
 } from '@medvedsson/market-data';
 import type { NotificationService } from '@medvedsson/notifications';
-import type { AppConfig, Candle } from '@medvedsson/shared';
+import type {
+  AppConfig,
+  Candle,
+  SymbolRuntimeSettings,
+} from '@medvedsson/shared';
 import { round, SIGNAL_TYPES, timeframeToMs } from '@medvedsson/shared';
 import {
   evaluateMomentumStrategy,
@@ -35,6 +39,7 @@ import {
 } from './metrics.ts';
 
 type LoggerLike = {
+  debug: (payload: unknown, message?: string) => void;
   info: (payload: unknown, message?: string) => void;
   warn: (payload: unknown, message?: string) => void;
   error: (payload: unknown, message?: string) => void;
@@ -47,6 +52,11 @@ type RunnerStatus = {
   lastTickCompletedAt: string | null;
   lastError: string | null;
 };
+
+type MarketDataClient = Pick<MarketDataAdapter, 'fetchRecentCandles'>;
+type SymbolRecord = Awaited<
+  ReturnType<MedvedssonDatabase['listSymbols']>
+>[number];
 
 const isDatabaseError = (error: unknown): boolean => {
   if (!(error instanceof Error)) {
@@ -71,10 +81,12 @@ const isDatabaseError = (error: unknown): boolean => {
 export class TradingRunner {
   private readonly config: AppConfig;
   private readonly db: MedvedssonDatabase;
-  private readonly marketData: MarketDataAdapter;
+  private readonly marketDataOverride: MarketDataClient | null;
   private readonly notifications: NotificationService;
   private readonly logger: LoggerLike;
-  private readonly executionAdapter: ExecutionAdapter;
+  private readonly executionAdapterOverride: ExecutionAdapter | null;
+  private readonly marketDataAdapters = new Map<string, MarketDataAdapter>();
+  private readonly lastPolledAtBySymbolId = new Map<string, number>();
   private timeoutHandle: NodeJS.Timeout | null = null;
   private running = false;
   private activeRunId: string | null = null;
@@ -85,25 +97,23 @@ export class TradingRunner {
   constructor(params: {
     config: AppConfig;
     db: MedvedssonDatabase;
-    marketData: MarketDataAdapter;
+    marketData?: MarketDataClient;
     notifications: NotificationService;
     logger: LoggerLike;
     executionAdapter?: ExecutionAdapter;
   }) {
     this.config = params.config;
     this.db = params.db;
-    this.marketData = params.marketData;
+    this.marketDataOverride = params.marketData ?? null;
     this.notifications = params.notifications;
     this.logger = params.logger;
-    this.executionAdapter =
-      params.executionAdapter ??
-      new DryRunExecutionAdapter(params.db, params.config.execution);
+    this.executionAdapterOverride = params.executionAdapter ?? null;
   }
 
   async init(): Promise<void> {
-    await this.db.replaceActiveSymbols(
-      this.config.exchange,
-      this.config.symbols
+    await this.db.ensureDefaultSymbols(
+      this.config.defaultSymbols,
+      this.config.defaultSymbolSettings
     );
   }
 
@@ -126,7 +136,10 @@ export class TradingRunner {
       return this.getStatus();
     }
 
-    const run = await this.db.startRun(this.config);
+    const activeSymbols = (await this.db.listSymbols()).filter(
+      (symbol) => symbol.active
+    );
+    const run = await this.db.startRun(this.config, activeSymbols);
     this.activeRunId = run.id;
     this.running = true;
     await this.tick();
@@ -149,44 +162,133 @@ export class TradingRunner {
     return this.getStatus();
   }
 
-  private scheduleNextTick(): void {
+  private getSymbolSettings(symbol: SymbolRecord): SymbolRuntimeSettings {
+    return {
+      exchange: symbol.exchange,
+      exchangeTimeoutMs: symbol.exchange_timeout_ms,
+      exchangeRateLimitMs: symbol.exchange_rate_limit_ms,
+      timeframe: symbol.timeframe,
+      dryRun: symbol.dry_run,
+      allowShort: symbol.allow_short,
+      strategyKey: symbol.strategy_key,
+      strategyVersion: symbol.strategy_version,
+      signal: {
+        n: symbol.signal_n,
+        k: symbol.signal_k,
+        hBars: symbol.signal_h_bars,
+        timeframe: symbol.timeframe,
+      },
+      execution: {
+        fillModel: symbol.fill_model,
+        positionSizingMode: symbol.position_sizing_mode,
+        feeRate: symbol.fee_rate,
+        slippageBps: symbol.slippage_bps,
+        fixedUsdtPerTrade: symbol.fixed_usdt_per_trade,
+        equityStartUsdt: symbol.equity_start_usdt,
+      },
+      maxOpenPositions: symbol.max_open_positions,
+      cooldownBars: symbol.cooldown_bars,
+      maxDailyDrawdownPct: symbol.max_daily_drawdown_pct,
+      maxConsecutiveLosses: symbol.max_consecutive_losses,
+      pollIntervalMs: symbol.poll_interval_ms,
+    };
+  }
+
+  private getExecutionAdapter(symbol: SymbolRecord): ExecutionAdapter {
+    if (this.executionAdapterOverride) {
+      return this.executionAdapterOverride;
+    }
+
+    return new DryRunExecutionAdapter(
+      this.db,
+      this.getSymbolSettings(symbol).execution
+    );
+  }
+
+  private getMarketData(symbol: SymbolRecord): MarketDataClient {
+    if (this.marketDataOverride) {
+      return this.marketDataOverride;
+    }
+
+    const settings = this.getSymbolSettings(symbol);
+    const key = `${settings.exchange}:${settings.exchangeTimeoutMs}:${settings.exchangeRateLimitMs}`;
+    const existing = this.marketDataAdapters.get(key);
+
+    if (existing) {
+      return existing;
+    }
+
+    const adapter = new MarketDataAdapter(
+      {
+        exchange: settings.exchange,
+        timeoutMs: settings.exchangeTimeoutMs,
+        rateLimitMs: settings.exchangeRateLimitMs,
+      },
+      this.logger
+    );
+
+    this.marketDataAdapters.set(key, adapter);
+    return adapter;
+  }
+
+  private scheduleNextTick(activeSymbols: SymbolRecord[] = []): void {
     if (!this.running) {
       return;
     }
 
+    const now = Date.now();
+    const delays =
+      activeSymbols.length === 0
+        ? [this.config.defaultSymbolSettings.pollIntervalMs]
+        : activeSymbols.map((symbol) => {
+            const lastPolledAt = this.lastPolledAtBySymbolId.get(symbol.id);
+
+            if (lastPolledAt === undefined) {
+              return 0;
+            }
+
+            return Math.max(0, symbol.poll_interval_ms - (now - lastPolledAt));
+          });
+    const nextDelay = Math.max(100, Math.min(...delays));
+
     this.timeoutHandle = setTimeout(() => {
       void this.tick();
-    }, this.config.pollIntervalMs);
+    }, nextDelay);
   }
 
   private computeCooldownRemainingBars(
     lastExitTime: string | null,
-    currentCloseTime: string
+    currentCloseTime: string,
+    symbol: SymbolRecord
   ): number {
     if (!lastExitTime) {
       return 0;
     }
 
+    const settings = this.getSymbolSettings(symbol);
+
     const elapsedBars = Math.floor(
       (new Date(currentCloseTime).getTime() -
         new Date(lastExitTime).getTime()) /
-        timeframeToMs(this.config.timeframe)
+        timeframeToMs(settings.timeframe)
     );
 
-    return Math.max(0, this.config.cooldownBars - elapsedBars);
+    return Math.max(0, settings.cooldownBars - elapsedBars);
   }
 
   private async recordEquity(
     runId: string,
-    snapshotTime: string
+    snapshotTime: string,
+    activeSymbols: SymbolRecord[]
   ): Promise<void> {
     const openPositions = await this.db.getOpenPositionsCount(runId);
     const unrealizedPnl = await this.db.computeUnrealizedPnl(runId);
     const realizedPnlCum = await this.db.getRealizedPnlCum(runId);
-    const balanceUsdt = round(
-      this.config.execution.equityStartUsdt + realizedPnlCum,
-      8
+    const startingEquity = activeSymbols.reduce(
+      (sum, symbol) => sum + symbol.equity_start_usdt,
+      0
     );
+    const balanceUsdt = round(startingEquity + realizedPnlCum, 8);
     const equityUsdt = round(balanceUsdt + unrealizedPnl, 8);
 
     await this.db.recordEquitySnapshot({
@@ -207,12 +309,12 @@ export class TradingRunner {
 
   private async processPendingOrders(
     runId: string,
-    symbolId: string,
+    symbol: SymbolRecord,
     candle: Candle
   ): Promise<void> {
-    await this.executionAdapter.processPendingFills({
+    await this.getExecutionAdapter(symbol).processPendingFills({
       runId,
-      symbolId,
+      symbolId: symbol.id,
       openPrice: candle.open,
       openTime: candle.openTime,
     });
@@ -220,8 +322,9 @@ export class TradingRunner {
 
   private async finalizeProcessedCandle(
     runId: string,
-    symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number],
-    candle: Candle
+    symbol: SymbolRecord,
+    candle: Candle,
+    activeSymbols: SymbolRecord[]
   ): Promise<void> {
     candlesProcessedCounter.inc({
       symbol: symbol.symbol,
@@ -234,21 +337,24 @@ export class TradingRunner {
       Date.now() - new Date(candle.closeTime).getTime()
     );
 
-    await this.recordEquity(runId, candle.closeTime);
+    await this.recordEquity(runId, candle.closeTime, activeSymbols);
   }
 
   private async processCandle(
     runId: string,
-    symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number],
+    symbol: SymbolRecord,
     candle: Candle,
-    history: Candle[]
+    history: Candle[],
+    activeSymbols: SymbolRecord[]
   ): Promise<void> {
-    await this.processPendingOrders(runId, symbol.id, candle);
+    const settings = this.getSymbolSettings(symbol);
+
+    await this.processPendingOrders(runId, symbol, candle);
 
     const openPosition = await this.db.getOpenPosition(runId, symbol.id);
     const signal = evaluateMomentumStrategy(
       history,
-      this.config.signal,
+      settings.signal,
       openPosition
     );
 
@@ -258,7 +364,7 @@ export class TradingRunner {
         symbolId: symbol.id,
         candleCloseTime: signal.candleCloseTime,
       });
-      await this.finalizeProcessedCandle(runId, symbol, candle);
+      await this.finalizeProcessedCandle(runId, symbol, candle, activeSymbols);
       return;
     }
 
@@ -267,7 +373,7 @@ export class TradingRunner {
       symbolId: symbol.id,
       exchange: symbol.exchange,
       symbol: symbol.symbol,
-      timeframe: this.config.timeframe,
+      timeframe: symbol.timeframe,
       signal,
     });
     await this.db.recordProcessedCandle({
@@ -287,22 +393,23 @@ export class TradingRunner {
     );
     const cooldownRemainingBars = this.computeCooldownRemainingBars(
       lastClosedPosition?.exit_time?.toISOString() ?? null,
-      candle.closeTime
+      candle.closeTime,
+      symbol
     );
 
     const decision = evaluateRisk({
       signal,
       symbolEnabled: symbol.active,
-      enoughHistory: history.length >= requiredCandles(this.config.signal),
-      allowShort: this.config.allowShort,
-      maxOpenPositions: this.config.maxOpenPositions,
+      enoughHistory: history.length >= requiredCandles(settings.signal),
+      allowShort: settings.allowShort,
+      maxOpenPositions: settings.maxOpenPositions,
       openPositionsCount: await this.db.getOpenPositionsCount(runId),
       openPosition,
       cooldownRemainingBars,
       currentDrawdownPct: await this.db.getCurrentDrawdownPct(runId),
-      maxDailyDrawdownPct: this.config.maxDailyDrawdownPct,
+      maxDailyDrawdownPct: settings.maxDailyDrawdownPct,
       consecutiveLosses: await this.db.getConsecutiveLosses(runId),
-      maxConsecutiveLosses: this.config.maxConsecutiveLosses,
+      maxConsecutiveLosses: settings.maxConsecutiveLosses,
     });
 
     await this.db.updateSignalDecision(signalRow.id, decision);
@@ -319,7 +426,9 @@ export class TradingRunner {
     });
 
     if (decision.approved) {
-      const executionResult = await this.executionAdapter.handleApprovedSignal({
+      const executionResult = await this.getExecutionAdapter(
+        symbol
+      ).handleApprovedSignal({
         runId,
         signalId: signalRow.id,
         symbolId: symbol.id,
@@ -340,7 +449,7 @@ export class TradingRunner {
         symbol: symbol.symbol,
         signalType: signal.signalType,
         signalTime: signal.candleCloseTime,
-        strategyVersion: this.config.strategyVersion,
+        strategyVersion: settings.strategyVersion,
         reason: signal.reason,
         approved: true,
         referencePrice: candle.close,
@@ -350,29 +459,31 @@ export class TradingRunner {
         symbol: symbol.symbol,
         signalType: signal.signalType,
         signalTime: signal.candleCloseTime,
-        strategyVersion: this.config.strategyVersion,
+        strategyVersion: settings.strategyVersion,
         reason: decision.rejectionReason ?? signal.reason,
         approved: false,
         referencePrice: candle.close,
       });
     }
 
-    await this.finalizeProcessedCandle(runId, symbol, candle);
+    await this.finalizeProcessedCandle(runId, symbol, candle, activeSymbols);
   }
 
   private async processSymbol(
     runId: string,
-    symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number]
+    symbol: SymbolRecord,
+    activeSymbols: SymbolRecord[]
   ): Promise<void> {
+    const settings = this.getSymbolSettings(symbol);
     const historyLimit = Math.max(
-      this.config.signal.n + this.config.signal.hBars + 8,
+      settings.signal.n + settings.signal.hBars + 8,
       192
     );
     const cachedCandles = this.config.enableCandleStorage
       ? await this.db.getRecentCandles(
-          this.config.exchange,
+          symbol.exchange,
           symbol.symbol,
-          this.config.timeframe,
+          symbol.timeframe,
           historyLimit
         )
       : [];
@@ -381,9 +492,9 @@ export class TradingRunner {
     const startedAt = Date.now();
 
     try {
-      exchangeCandles = await this.marketData.fetchRecentCandles(
+      exchangeCandles = await this.getMarketData(symbol).fetchRecentCandles(
         symbol.symbol,
-        this.config.timeframe,
+        symbol.timeframe,
         historyLimit
       );
 
@@ -401,7 +512,7 @@ export class TradingRunner {
 
     const exchangeDiagnostics = analyzeCandleSeries(
       exchangeCandles,
-      this.config.timeframe
+      symbol.timeframe
     );
 
     if (exchangeDiagnostics.issues.length > 0) {
@@ -416,10 +527,7 @@ export class TradingRunner {
     }
 
     const candles = mergeCandles(cachedCandles, exchangeCandles);
-    const combinedDiagnostics = analyzeCandleSeries(
-      candles,
-      this.config.timeframe
-    );
+    const combinedDiagnostics = analyzeCandleSeries(candles, symbol.timeframe);
 
     if (combinedDiagnostics.issues.length > 0) {
       this.logger.warn(
@@ -458,7 +566,13 @@ export class TradingRunner {
           new Date(candidate.closeTime).getTime()
       );
 
-      await this.processCandle(runId, symbol, candidate, history);
+      await this.processCandle(
+        runId,
+        symbol,
+        candidate,
+        history,
+        activeSymbols
+      );
     }
   }
 
@@ -469,14 +583,25 @@ export class TradingRunner {
 
     this.lastTickStartedAt = new Date().toISOString();
     this.lastError = null;
+    let activeSymbols: SymbolRecord[] = [];
 
     try {
-      const symbols = (await this.db.listSymbols()).filter(
+      activeSymbols = (await this.db.listSymbols()).filter(
         (symbol) => symbol.active
       );
+      const now = Date.now();
+      const dueSymbols = activeSymbols.filter((symbol) => {
+        const lastPolledAt = this.lastPolledAtBySymbolId.get(symbol.id);
 
-      for (const symbol of symbols) {
-        await this.processSymbol(this.activeRunId, symbol);
+        return (
+          lastPolledAt === undefined ||
+          now - lastPolledAt >= symbol.poll_interval_ms
+        );
+      });
+
+      for (const symbol of dueSymbols) {
+        this.lastPolledAtBySymbolId.set(symbol.id, Date.now());
+        await this.processSymbol(this.activeRunId, symbol, activeSymbols);
       }
 
       this.lastTickCompletedAt = new Date().toISOString();
@@ -492,7 +617,7 @@ export class TradingRunner {
       this.logger.error({ error }, 'Runner tick failed.');
       await this.notifications.notifyRunnerError(this.lastError);
     } finally {
-      this.scheduleNextTick();
+      this.scheduleNextTick(activeSymbols);
     }
   }
 }

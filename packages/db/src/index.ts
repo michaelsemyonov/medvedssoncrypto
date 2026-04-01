@@ -8,12 +8,16 @@ import {
 import type {
   AppConfig,
   Candle,
+  ExchangeName,
   OpenPositionContext,
   PushSubscriptionRecord,
   RiskDecision,
   StrategySignal,
+  SymbolRuntimeSettings,
+  Timeframe,
 } from '@medvedsson/shared';
 import {
+  DEFAULT_SYMBOL_SETTINGS,
   normalizeSymbol,
   round,
   SIGNAL_TYPES,
@@ -44,13 +48,39 @@ type RunRow = {
 
 type SymbolRow = {
   id: string;
-  exchange: string;
+  exchange: ExchangeName;
+  exchange_timeout_ms: number;
+  exchange_rate_limit_ms: number;
   symbol: string;
   base_asset: string;
   quote_asset: string;
+  timeframe: Timeframe;
+  dry_run: boolean;
+  allow_short: boolean;
+  strategy_key: string;
+  strategy_version: string;
+  signal_n: number;
+  signal_k: number;
+  signal_h_bars: number;
+  fill_model: 'next_open';
+  fee_rate: number;
+  slippage_bps: number;
+  position_sizing_mode: 'fixed_usdt';
+  fixed_usdt_per_trade: number;
+  equity_start_usdt: number;
+  max_open_positions: number;
+  cooldown_bars: number;
+  max_daily_drawdown_pct: number;
+  max_consecutive_losses: number;
+  poll_interval_ms: number;
   active: boolean;
   created_at: Date;
   updated_at: Date;
+};
+
+type SymbolUpsertParams = SymbolRuntimeSettings & {
+  symbol: string;
+  active: boolean;
 };
 
 type SignalRow = {
@@ -246,13 +276,120 @@ const normalizeRunRow = (row: MysqlRow): RunRow => ({
 
 const normalizeSymbolRow = (row: MysqlRow): SymbolRow => ({
   id: String(row.id),
-  exchange: String(row.exchange),
+  exchange: String(row.exchange) as ExchangeName,
+  exchange_timeout_ms: Number(row.exchange_timeout_ms),
+  exchange_rate_limit_ms: Number(row.exchange_rate_limit_ms),
   symbol: String(row.symbol),
   base_asset: String(row.base_asset),
   quote_asset: String(row.quote_asset),
+  timeframe: String(row.timeframe) as Timeframe,
+  dry_run: parseBoolean(row.dry_run),
+  allow_short: parseBoolean(row.allow_short),
+  strategy_key: String(row.strategy_key),
+  strategy_version: String(row.strategy_version),
+  signal_n: Number(row.signal_n),
+  signal_k: Number(row.signal_k),
+  signal_h_bars: Number(row.signal_h_bars),
+  fill_model: String(row.fill_model) as SymbolRow['fill_model'],
+  fee_rate: Number(row.fee_rate),
+  slippage_bps: Number(row.slippage_bps),
+  position_sizing_mode: String(
+    row.position_sizing_mode
+  ) as SymbolRow['position_sizing_mode'],
+  fixed_usdt_per_trade: Number(row.fixed_usdt_per_trade),
+  equity_start_usdt: Number(row.equity_start_usdt),
+  max_open_positions: Number(row.max_open_positions),
+  cooldown_bars: Number(row.cooldown_bars),
+  max_daily_drawdown_pct: Number(row.max_daily_drawdown_pct),
+  max_consecutive_losses: Number(row.max_consecutive_losses),
+  poll_interval_ms: Number(row.poll_interval_ms),
   active: parseBoolean(row.active),
   created_at: parseDate(row.created_at)!,
   updated_at: parseDate(row.updated_at)!,
+});
+
+const normalizeSymbolSettings = (
+  settings: Partial<SymbolRuntimeSettings> = {}
+): SymbolRuntimeSettings => ({
+  exchange: settings.exchange ?? DEFAULT_SYMBOL_SETTINGS.exchange,
+  exchangeTimeoutMs:
+    settings.exchangeTimeoutMs ?? DEFAULT_SYMBOL_SETTINGS.exchangeTimeoutMs,
+  exchangeRateLimitMs:
+    settings.exchangeRateLimitMs ?? DEFAULT_SYMBOL_SETTINGS.exchangeRateLimitMs,
+  timeframe: settings.timeframe ?? DEFAULT_SYMBOL_SETTINGS.timeframe,
+  dryRun: settings.dryRun ?? DEFAULT_SYMBOL_SETTINGS.dryRun,
+  allowShort: settings.allowShort ?? DEFAULT_SYMBOL_SETTINGS.allowShort,
+  strategyKey: settings.strategyKey ?? DEFAULT_SYMBOL_SETTINGS.strategyKey,
+  strategyVersion:
+    settings.strategyVersion ?? DEFAULT_SYMBOL_SETTINGS.strategyVersion,
+  signal: {
+    n: settings.signal?.n ?? DEFAULT_SYMBOL_SETTINGS.signal.n,
+    k: settings.signal?.k ?? DEFAULT_SYMBOL_SETTINGS.signal.k,
+    hBars: settings.signal?.hBars ?? DEFAULT_SYMBOL_SETTINGS.signal.hBars,
+    timeframe:
+      settings.signal?.timeframe ??
+      settings.timeframe ??
+      DEFAULT_SYMBOL_SETTINGS.signal.timeframe,
+  },
+  execution: {
+    fillModel:
+      settings.execution?.fillModel ??
+      DEFAULT_SYMBOL_SETTINGS.execution.fillModel,
+    positionSizingMode:
+      settings.execution?.positionSizingMode ??
+      DEFAULT_SYMBOL_SETTINGS.execution.positionSizingMode,
+    feeRate:
+      settings.execution?.feeRate ?? DEFAULT_SYMBOL_SETTINGS.execution.feeRate,
+    slippageBps:
+      settings.execution?.slippageBps ??
+      DEFAULT_SYMBOL_SETTINGS.execution.slippageBps,
+    fixedUsdtPerTrade:
+      settings.execution?.fixedUsdtPerTrade ??
+      DEFAULT_SYMBOL_SETTINGS.execution.fixedUsdtPerTrade,
+    equityStartUsdt:
+      settings.execution?.equityStartUsdt ??
+      DEFAULT_SYMBOL_SETTINGS.execution.equityStartUsdt,
+  },
+  maxOpenPositions:
+    settings.maxOpenPositions ?? DEFAULT_SYMBOL_SETTINGS.maxOpenPositions,
+  cooldownBars: settings.cooldownBars ?? DEFAULT_SYMBOL_SETTINGS.cooldownBars,
+  maxDailyDrawdownPct:
+    settings.maxDailyDrawdownPct ?? DEFAULT_SYMBOL_SETTINGS.maxDailyDrawdownPct,
+  maxConsecutiveLosses:
+    settings.maxConsecutiveLosses ??
+    DEFAULT_SYMBOL_SETTINGS.maxConsecutiveLosses,
+  pollIntervalMs:
+    settings.pollIntervalMs ?? DEFAULT_SYMBOL_SETTINGS.pollIntervalMs,
+});
+
+const getSymbolRuntimeSettings = (row: SymbolRow): SymbolRuntimeSettings => ({
+  exchange: row.exchange,
+  exchangeTimeoutMs: row.exchange_timeout_ms,
+  exchangeRateLimitMs: row.exchange_rate_limit_ms,
+  timeframe: row.timeframe,
+  dryRun: row.dry_run,
+  allowShort: row.allow_short,
+  strategyKey: row.strategy_key,
+  strategyVersion: row.strategy_version,
+  signal: {
+    n: row.signal_n,
+    k: row.signal_k,
+    hBars: row.signal_h_bars,
+    timeframe: row.timeframe,
+  },
+  execution: {
+    fillModel: row.fill_model,
+    positionSizingMode: row.position_sizing_mode,
+    feeRate: row.fee_rate,
+    slippageBps: row.slippage_bps,
+    fixedUsdtPerTrade: row.fixed_usdt_per_trade,
+    equityStartUsdt: row.equity_start_usdt,
+  },
+  maxOpenPositions: row.max_open_positions,
+  cooldownBars: row.cooldown_bars,
+  maxDailyDrawdownPct: row.max_daily_drawdown_pct,
+  maxConsecutiveLosses: row.max_consecutive_losses,
+  pollIntervalMs: row.poll_interval_ms,
 });
 
 const normalizeSignalRow = (row: MysqlRow): SignalRow => ({
@@ -472,18 +609,27 @@ export class MedvedssonDatabase {
     return normalizeRunRow(rows[0]!);
   }
 
-  async startRun(config: AppConfig): Promise<RunRow> {
+  async startRun(
+    config: AppConfig,
+    activeSymbols: SymbolRow[] = []
+  ): Promise<RunRow> {
     const current = await this.getActiveRun();
 
     if (current) {
       return current;
     }
 
+    const baseline =
+      activeSymbols[0] === undefined
+        ? config.defaultSymbolSettings
+        : getSymbolRuntimeSettings(activeSymbols[0]);
+
     return this.createRun({
-      name: `${config.strategyKey}-${config.strategyVersion}-${new Date().toISOString()}`,
-      strategyKey: config.strategyKey,
-      version: config.strategyVersion,
-      timeframe: config.timeframe,
+      name: `${baseline.strategyKey}-${baseline.strategyVersion}-${new Date().toISOString()}`,
+      strategyKey: baseline.strategyKey,
+      version: baseline.strategyVersion,
+      timeframe: baseline.timeframe,
+      dryRun: baseline.dryRun,
     });
   }
 
@@ -497,10 +643,144 @@ export class MedvedssonDatabase {
     );
   }
 
-  async replaceActiveSymbols(
-    exchange: string,
-    symbols: string[]
+  private async upsertSymbolRecord(
+    params: SymbolUpsertParams
+  ): Promise<SymbolRow> {
+    const normalizedSymbol = normalizeSymbol(params.symbol);
+    const [baseAsset, quoteAsset] = normalizedSymbol.split('/');
+    const settings = normalizeSymbolSettings({
+      ...params,
+      signal: {
+        ...params.signal,
+        timeframe: params.timeframe,
+      },
+    });
+
+    await execute(
+      this.pool,
+      `INSERT INTO symbols (
+         id,
+         exchange,
+         exchange_timeout_ms,
+         exchange_rate_limit_ms,
+         symbol,
+         base_asset,
+         quote_asset,
+         timeframe,
+         dry_run,
+         allow_short,
+         strategy_key,
+         strategy_version,
+         signal_n,
+         signal_k,
+         signal_h_bars,
+         fill_model,
+         fee_rate,
+         slippage_bps,
+         position_sizing_mode,
+         fixed_usdt_per_trade,
+         equity_start_usdt,
+         max_open_positions,
+         cooldown_bars,
+         max_daily_drawdown_pct,
+         max_consecutive_losses,
+         poll_interval_ms,
+         active
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         exchange_timeout_ms = VALUES(exchange_timeout_ms),
+         exchange_rate_limit_ms = VALUES(exchange_rate_limit_ms),
+         base_asset = VALUES(base_asset),
+         quote_asset = VALUES(quote_asset),
+         timeframe = VALUES(timeframe),
+         dry_run = VALUES(dry_run),
+         allow_short = VALUES(allow_short),
+         strategy_key = VALUES(strategy_key),
+         strategy_version = VALUES(strategy_version),
+         signal_n = VALUES(signal_n),
+         signal_k = VALUES(signal_k),
+         signal_h_bars = VALUES(signal_h_bars),
+         fill_model = VALUES(fill_model),
+         fee_rate = VALUES(fee_rate),
+         slippage_bps = VALUES(slippage_bps),
+         position_sizing_mode = VALUES(position_sizing_mode),
+         fixed_usdt_per_trade = VALUES(fixed_usdt_per_trade),
+         equity_start_usdt = VALUES(equity_start_usdt),
+         max_open_positions = VALUES(max_open_positions),
+         cooldown_bars = VALUES(cooldown_bars),
+         max_daily_drawdown_pct = VALUES(max_daily_drawdown_pct),
+         max_consecutive_losses = VALUES(max_consecutive_losses),
+         poll_interval_ms = VALUES(poll_interval_ms),
+         active = VALUES(active),
+         updated_at = CURRENT_TIMESTAMP(3)`,
+      [
+        randomUUID(),
+        settings.exchange,
+        settings.exchangeTimeoutMs,
+        settings.exchangeRateLimitMs,
+        normalizedSymbol,
+        baseAsset,
+        quoteAsset,
+        settings.timeframe,
+        settings.dryRun,
+        settings.allowShort,
+        settings.strategyKey,
+        settings.strategyVersion,
+        settings.signal.n,
+        settings.signal.k,
+        settings.signal.hBars,
+        settings.execution.fillModel,
+        settings.execution.feeRate,
+        settings.execution.slippageBps,
+        settings.execution.positionSizingMode,
+        settings.execution.fixedUsdtPerTrade,
+        settings.execution.equityStartUsdt,
+        settings.maxOpenPositions,
+        settings.cooldownBars,
+        settings.maxDailyDrawdownPct,
+        settings.maxConsecutiveLosses,
+        settings.pollIntervalMs,
+        params.active,
+      ]
+    );
+
+    const rows = await query<MysqlRow>(
+      this.pool,
+      'SELECT * FROM symbols WHERE exchange = ? AND symbol = ? LIMIT 1',
+      [settings.exchange, normalizedSymbol]
+    );
+
+    return normalizeSymbolRow(rows[0]!);
+  }
+
+  async ensureDefaultSymbols(
+    symbols: string[],
+    settings: SymbolRuntimeSettings = DEFAULT_SYMBOL_SETTINGS
   ): Promise<SymbolRow[]> {
+    const rows = await query<MysqlRow>(
+      this.pool,
+      'SELECT COUNT(*) AS count FROM symbols'
+    );
+
+    if (Number(rows[0]?.count ?? 0) > 0) {
+      return this.listSymbols();
+    }
+
+    await this.replaceActiveSymbols(settings.exchange, symbols, settings);
+    return this.listSymbols();
+  }
+
+  async replaceActiveSymbols(
+    exchange: ExchangeName,
+    symbols: string[],
+    settings: Partial<SymbolRuntimeSettings> = {}
+  ): Promise<SymbolRow[]> {
+    const normalizedSettings = normalizeSymbolSettings({
+      ...settings,
+      exchange,
+    });
+
     await execute(
       this.pool,
       `UPDATE symbols SET active = FALSE, updated_at = CURRENT_TIMESTAMP(3) WHERE exchange = ?`,
@@ -510,29 +790,20 @@ export class MedvedssonDatabase {
     const results: SymbolRow[] = [];
 
     for (const symbol of symbols.map(normalizeSymbol)) {
-      const [baseAsset, quoteAsset] = symbol.split('/');
-      await execute(
-        this.pool,
-        `INSERT INTO symbols (id, exchange, symbol, base_asset, quote_asset, active)
-         VALUES (?, ?, ?, ?, ?, TRUE)
-         ON DUPLICATE KEY UPDATE
-           base_asset = VALUES(base_asset),
-           quote_asset = VALUES(quote_asset),
-           active = TRUE,
-           updated_at = CURRENT_TIMESTAMP(3)`,
-        [randomUUID(), exchange, symbol, baseAsset, quoteAsset]
+      results.push(
+        await this.upsertSymbolRecord({
+          ...normalizedSettings,
+          symbol,
+          active: true,
+        })
       );
-
-      const rows = await query<MysqlRow>(
-        this.pool,
-        'SELECT * FROM symbols WHERE exchange = ? AND symbol = ? LIMIT 1',
-        [exchange, symbol]
-      );
-
-      results.push(normalizeSymbolRow(rows[0]!));
     }
 
     return results;
+  }
+
+  async createSymbol(params: SymbolUpsertParams): Promise<SymbolRow> {
+    return this.upsertSymbolRecord(params);
   }
 
   async listSymbols(): Promise<SymbolRow[]> {
@@ -543,7 +814,10 @@ export class MedvedssonDatabase {
     return rows.map(normalizeSymbolRow);
   }
 
-  async getSymbol(exchange: string, symbol: string): Promise<SymbolRow | null> {
+  async getSymbol(
+    exchange: ExchangeName,
+    symbol: string
+  ): Promise<SymbolRow | null> {
     const rows = await query<MysqlRow>(
       this.pool,
       'SELECT * FROM symbols WHERE exchange = ? AND symbol = ? LIMIT 1',
@@ -551,6 +825,101 @@ export class MedvedssonDatabase {
     );
 
     return rows[0] ? normalizeSymbolRow(rows[0]) : null;
+  }
+
+  async getSymbolById(id: string): Promise<SymbolRow | null> {
+    const rows = await query<MysqlRow>(
+      this.pool,
+      'SELECT * FROM symbols WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    return rows[0] ? normalizeSymbolRow(rows[0]) : null;
+  }
+
+  async updateSymbol(
+    id: string,
+    params: SymbolUpsertParams
+  ): Promise<SymbolRow> {
+    const normalizedSymbol = normalizeSymbol(params.symbol);
+    const [baseAsset, quoteAsset] = normalizedSymbol.split('/');
+    const settings = normalizeSymbolSettings({
+      ...params,
+      signal: {
+        ...params.signal,
+        timeframe: params.timeframe,
+      },
+    });
+
+    await execute(
+      this.pool,
+      `UPDATE symbols
+       SET exchange = ?,
+           exchange_timeout_ms = ?,
+           exchange_rate_limit_ms = ?,
+           symbol = ?,
+           base_asset = ?,
+           quote_asset = ?,
+           timeframe = ?,
+           dry_run = ?,
+           allow_short = ?,
+           strategy_key = ?,
+           strategy_version = ?,
+           signal_n = ?,
+           signal_k = ?,
+           signal_h_bars = ?,
+           fill_model = ?,
+           fee_rate = ?,
+           slippage_bps = ?,
+           position_sizing_mode = ?,
+           fixed_usdt_per_trade = ?,
+           equity_start_usdt = ?,
+           max_open_positions = ?,
+           cooldown_bars = ?,
+           max_daily_drawdown_pct = ?,
+           max_consecutive_losses = ?,
+           poll_interval_ms = ?,
+           active = ?,
+           updated_at = CURRENT_TIMESTAMP(3)
+       WHERE id = ?`,
+      [
+        settings.exchange,
+        settings.exchangeTimeoutMs,
+        settings.exchangeRateLimitMs,
+        normalizedSymbol,
+        baseAsset,
+        quoteAsset,
+        settings.timeframe,
+        settings.dryRun,
+        settings.allowShort,
+        settings.strategyKey,
+        settings.strategyVersion,
+        settings.signal.n,
+        settings.signal.k,
+        settings.signal.hBars,
+        settings.execution.fillModel,
+        settings.execution.feeRate,
+        settings.execution.slippageBps,
+        settings.execution.positionSizingMode,
+        settings.execution.fixedUsdtPerTrade,
+        settings.execution.equityStartUsdt,
+        settings.maxOpenPositions,
+        settings.cooldownBars,
+        settings.maxDailyDrawdownPct,
+        settings.maxConsecutiveLosses,
+        settings.pollIntervalMs,
+        params.active,
+        id,
+      ]
+    );
+
+    const row = await this.getSymbolById(id);
+
+    if (!row) {
+      throw new Error(`Symbol ${id} was not found after update.`);
+    }
+
+    return row;
   }
 
   async upsertCandles(candles: Candle[]): Promise<void> {

@@ -16,7 +16,7 @@ MedvedssonCrypto is implemented as a modular monolith:
 
 ## Candle pipeline
 
-1. Runner polls configured symbols for recent 5-minute candles.
+1. Runner polls active symbols from MySQL using each symbol row's exchange and timeframe settings.
 2. Candles are normalized and optionally persisted into `market_candles`.
 3. Any pending dry-run orders scheduled for the new candle open are filled first.
 4. The strategy evaluates the newly closed candle with warm-up history.

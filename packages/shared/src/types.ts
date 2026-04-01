@@ -3,46 +3,54 @@ export const SIGNAL_TYPES = {
   SHORT_ENTRY: 'SHORT_ENTRY',
   LONG_EXIT: 'LONG_EXIT',
   SHORT_EXIT: 'SHORT_EXIT',
-  NO_SIGNAL: 'NO_SIGNAL'
+  NO_SIGNAL: 'NO_SIGNAL',
 } as const;
 
 export type SignalType = (typeof SIGNAL_TYPES)[keyof typeof SIGNAL_TYPES];
 
 export const POSITION_SIDES = {
   LONG: 'LONG',
-  SHORT: 'SHORT'
+  SHORT: 'SHORT',
 } as const;
 
 export type PositionSide = (typeof POSITION_SIDES)[keyof typeof POSITION_SIDES];
 
 export const POSITION_STATUSES = {
   OPEN: 'OPEN',
-  CLOSED: 'CLOSED'
+  CLOSED: 'CLOSED',
 } as const;
 
-export type PositionStatus = (typeof POSITION_STATUSES)[keyof typeof POSITION_STATUSES];
+export type PositionStatus =
+  (typeof POSITION_STATUSES)[keyof typeof POSITION_STATUSES];
 
 export const ORDER_STATUSES = {
   PENDING: 'PENDING',
   FILLED: 'FILLED',
-  CANCELLED: 'CANCELLED'
+  CANCELLED: 'CANCELLED',
 } as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[keyof typeof ORDER_STATUSES];
 
 export const ORDER_INTENTS = {
   OPEN_POSITION: 'OPEN_POSITION',
-  CLOSE_POSITION: 'CLOSE_POSITION'
+  CLOSE_POSITION: 'CLOSE_POSITION',
 } as const;
 
 export type OrderIntent = (typeof ORDER_INTENTS)[keyof typeof ORDER_INTENTS];
 
 export const ORDER_SIDES = {
   BUY: 'BUY',
-  SELL: 'SELL'
+  SELL: 'SELL',
 } as const;
 
 export type OrderSide = (typeof ORDER_SIDES)[keyof typeof ORDER_SIDES];
+
+export const EXCHANGES = {
+  BYBIT: 'bybit',
+  BINANCE: 'binance',
+} as const;
+
+export type ExchangeName = (typeof EXCHANGES)[keyof typeof EXCHANGES];
 
 export type Timeframe = '5m' | '15m';
 
@@ -138,16 +146,12 @@ export type AuthConfig = {
   sessionTtlHours: number;
 };
 
-export type AppConfig = {
-  nodeEnv: 'development' | 'test' | 'production';
-  port: number;
-  databaseUrl: string;
-  exchange: 'bybit' | 'binance';
+export type SymbolRuntimeSettings = {
+  exchange: ExchangeName;
   exchangeTimeoutMs: number;
   exchangeRateLimitMs: number;
   timeframe: Timeframe;
-  symbols: string[];
-  dryRun: true;
+  dryRun: boolean;
   allowShort: boolean;
   strategyKey: string;
   strategyVersion: string;
@@ -158,6 +162,30 @@ export type AppConfig = {
   maxDailyDrawdownPct: number;
   maxConsecutiveLosses: number;
   pollIntervalMs: number;
+};
+
+export type AppConfig = {
+  nodeEnv: 'development' | 'test' | 'production';
+  port: number;
+  databaseUrl: string;
+  exchange: ExchangeName;
+  exchangeTimeoutMs: number;
+  exchangeRateLimitMs: number;
+  timeframe: Timeframe;
+  symbols: string[];
+  dryRun: boolean;
+  allowShort: boolean;
+  strategyKey: string;
+  strategyVersion: string;
+  signal: StrategyParams;
+  execution: ExecutionConfig;
+  maxOpenPositions: number;
+  cooldownBars: number;
+  maxDailyDrawdownPct: number;
+  maxConsecutiveLosses: number;
+  pollIntervalMs: number;
+  defaultSymbols: string[];
+  defaultSymbolSettings: SymbolRuntimeSettings;
   enableCandleStorage: boolean;
   runnerAutostart: boolean;
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';

@@ -3,7 +3,7 @@
 ## Core tables
 
 - `strategy_runs`: strategy sessions and dry-run lifecycle
-- `symbols`: tracked exchange symbols and active flags
+- `symbols`: tracked exchange symbols, active flags, and per-symbol runtime settings
 - `market_candles`: optional persisted OHLCV for audit and replay
 - `run_symbol_progress`: last processed candle per run and symbol
 - `signals`: persisted actionable signals only

@@ -39,7 +39,8 @@ Important metrics:
 
 ## Operational notes
 
-- V1 refuses to boot if `DRY_RUN` is not true.
+- Symbol, strategy, execution, and risk settings are stored on the `symbols` table and can be edited from the PWA settings screen.
+- The platform still executes simulated orders only in V1.
 - Web Push requires valid VAPID keys and HTTPS in production.
 - Exchange/API interruptions are retried with backoff and the runner keeps polling.
 - Restart safety depends on preserving MySQL state.

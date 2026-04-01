@@ -36,23 +36,54 @@ const main = async () => {
   const args = parseArgs();
   const db = createDatabase(config.databaseUrl);
   await db.migrate();
+  await db.ensureDefaultSymbols(
+    config.defaultSymbols,
+    config.defaultSymbolSettings
+  );
 
-  const symbols = args.symbols ?? config.symbols;
-  await db.replaceActiveSymbols(config.exchange, symbols);
+  if (args.symbols) {
+    await db.replaceActiveSymbols(
+      config.defaultSymbolSettings.exchange,
+      args.symbols,
+      config.defaultSymbolSettings
+    );
+  }
+
   const symbolRows = (await db.listSymbols()).filter((symbol) => symbol.active);
+  const runDefaults = symbolRows[0]
+    ? {
+        strategyKey: symbolRows[0].strategy_key,
+        strategyVersion: symbolRows[0].strategy_version,
+        timeframe: symbolRows[0].timeframe,
+        dryRun: symbolRows[0].dry_run,
+      }
+    : {
+        strategyKey: config.defaultSymbolSettings.strategyKey,
+        strategyVersion: config.defaultSymbolSettings.strategyVersion,
+        timeframe: config.defaultSymbolSettings.timeframe,
+        dryRun: config.defaultSymbolSettings.dryRun,
+      };
   const run = await db.createRun({
     name: `replay-${args.start}-${args.end}`,
-    strategyKey: config.strategyKey,
-    version: config.strategyVersion,
-    timeframe: config.timeframe,
+    strategyKey: runDefaults.strategyKey,
+    version: runDefaults.strategyVersion,
+    timeframe: runDefaults.timeframe,
+    dryRun: runDefaults.dryRun,
   });
-  const executionAdapter = new DryRunExecutionAdapter(db, config.execution);
 
   for (const symbol of symbolRows) {
+    const executionAdapter = new DryRunExecutionAdapter(db, {
+      fillModel: symbol.fill_model,
+      positionSizingMode: symbol.position_sizing_mode,
+      feeRate: symbol.fee_rate,
+      slippageBps: symbol.slippage_bps,
+      fixedUsdtPerTrade: symbol.fixed_usdt_per_trade,
+      equityStartUsdt: symbol.equity_start_usdt,
+    });
     const candles = await db.getCandlesInRange({
-      exchange: config.exchange,
+      exchange: symbol.exchange,
       symbol: symbol.symbol,
-      timeframe: config.timeframe,
+      timeframe: symbol.timeframe,
       startTime: args.start,
       endTime: args.end,
     });
@@ -71,7 +102,12 @@ const main = async () => {
       const openPosition = await db.getOpenPosition(run.id, symbol.id);
       const signal = evaluateMomentumStrategy(
         history,
-        config.signal,
+        {
+          n: symbol.signal_n,
+          k: symbol.signal_k,
+          hBars: symbol.signal_h_bars,
+          timeframe: symbol.timeframe,
+        },
         openPosition
       );
 
@@ -89,7 +125,7 @@ const main = async () => {
         symbolId: symbol.id,
         exchange: symbol.exchange,
         symbol: symbol.symbol,
-        timeframe: config.timeframe,
+        timeframe: symbol.timeframe,
         signal,
       });
       await db.recordProcessedCandle({
@@ -107,27 +143,34 @@ const main = async () => {
           ? 0
           : Math.max(
               0,
-              config.cooldownBars -
+              symbol.cooldown_bars -
                 Math.floor(
                   (new Date(candle.closeTime).getTime() -
                     lastClosedPosition.exit_time.getTime()) /
-                    timeframeToMs(config.timeframe)
+                    timeframeToMs(symbol.timeframe)
                 )
             );
 
       const decision = evaluateRisk({
         signal,
         symbolEnabled: symbol.active,
-        enoughHistory: history.length >= requiredCandles(config.signal),
-        allowShort: config.allowShort,
-        maxOpenPositions: config.maxOpenPositions,
+        enoughHistory:
+          history.length >=
+          requiredCandles({
+            n: symbol.signal_n,
+            k: symbol.signal_k,
+            hBars: symbol.signal_h_bars,
+            timeframe: symbol.timeframe,
+          }),
+        allowShort: symbol.allow_short,
+        maxOpenPositions: symbol.max_open_positions,
         openPositionsCount: await db.getOpenPositionsCount(run.id),
         openPosition,
         cooldownRemainingBars,
         currentDrawdownPct: await db.getCurrentDrawdownPct(run.id),
-        maxDailyDrawdownPct: config.maxDailyDrawdownPct,
+        maxDailyDrawdownPct: symbol.max_daily_drawdown_pct,
         consecutiveLosses: await db.getConsecutiveLosses(run.id),
-        maxConsecutiveLosses: config.maxConsecutiveLosses,
+        maxConsecutiveLosses: symbol.max_consecutive_losses,
       });
 
       await db.updateSignalDecision(signalRow.id, decision);
@@ -152,10 +195,11 @@ const main = async () => {
     }
   }
 
-  const stats = await db.getStatsSummary(
-    run.id,
-    config.execution.equityStartUsdt
+  const startingEquity = symbolRows.reduce(
+    (sum, symbol) => sum + symbol.equity_start_usdt,
+    0
   );
+  const stats = await db.getStatsSummary(run.id, startingEquity);
   await db.stopRun(run.id);
   await db.close();
   console.log(JSON.stringify({ runId: run.id, stats }, null, 2));

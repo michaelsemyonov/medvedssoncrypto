@@ -202,4 +202,31 @@ export const MIGRATIONS: Array<{ id: string; sql: string }> = [
         AND p.exit_time IS NOT NULL;
     `,
   },
+  {
+    id: '003_symbol_runtime_settings',
+    sql: `
+      ALTER TABLE symbols
+      ADD COLUMN exchange_timeout_ms INT NOT NULL DEFAULT 10000 AFTER exchange,
+      ADD COLUMN exchange_rate_limit_ms INT NOT NULL DEFAULT 300 AFTER exchange_timeout_ms,
+      ADD COLUMN timeframe VARCHAR(16) NOT NULL DEFAULT '5m' AFTER quote_asset,
+      ADD COLUMN dry_run BOOLEAN NOT NULL DEFAULT TRUE AFTER timeframe,
+      ADD COLUMN allow_short BOOLEAN NOT NULL DEFAULT TRUE AFTER dry_run,
+      ADD COLUMN strategy_key VARCHAR(128) NOT NULL DEFAULT 'momentum_96_5_72' AFTER allow_short,
+      ADD COLUMN strategy_version VARCHAR(64) NOT NULL DEFAULT '1.0.0' AFTER strategy_key,
+      ADD COLUMN signal_n INT NOT NULL DEFAULT 96 AFTER strategy_version,
+      ADD COLUMN signal_k INT NOT NULL DEFAULT 5 AFTER signal_n,
+      ADD COLUMN signal_h_bars INT NOT NULL DEFAULT 72 AFTER signal_k,
+      ADD COLUMN fill_model VARCHAR(32) NOT NULL DEFAULT 'next_open' AFTER signal_h_bars,
+      ADD COLUMN fee_rate DOUBLE NOT NULL DEFAULT 0.001 AFTER fill_model,
+      ADD COLUMN slippage_bps DOUBLE NOT NULL DEFAULT 5 AFTER fee_rate,
+      ADD COLUMN position_sizing_mode VARCHAR(32) NOT NULL DEFAULT 'fixed_usdt' AFTER slippage_bps,
+      ADD COLUMN fixed_usdt_per_trade DOUBLE NOT NULL DEFAULT 100 AFTER position_sizing_mode,
+      ADD COLUMN equity_start_usdt DOUBLE NOT NULL DEFAULT 10000 AFTER fixed_usdt_per_trade,
+      ADD COLUMN max_open_positions INT NOT NULL DEFAULT 5 AFTER equity_start_usdt,
+      ADD COLUMN cooldown_bars INT NOT NULL DEFAULT 3 AFTER max_open_positions,
+      ADD COLUMN max_daily_drawdown_pct DOUBLE NOT NULL DEFAULT 5 AFTER cooldown_bars,
+      ADD COLUMN max_consecutive_losses INT NOT NULL DEFAULT 5 AFTER max_daily_drawdown_pct,
+      ADD COLUMN poll_interval_ms INT NOT NULL DEFAULT 15000 AFTER max_consecutive_losses;
+    `,
+  },
 ];

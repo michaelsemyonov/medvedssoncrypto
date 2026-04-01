@@ -20,7 +20,7 @@ It provides:
 - `Signals`: recent signal rows with approval/rejection state and formula values
 - `Positions`: open dry-run positions with unrealized PnL
 - `Trades`: completed simulated trades and realized PnL
-- `Settings`: subscribe/unsubscribe to web push notifications
+- `Settings`: subscribe/unsubscribe to web push notifications and manage symbol-specific trading settings
 
 ## Push flow
 

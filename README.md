@@ -80,17 +80,14 @@ The API runs on `http://localhost:3000` and the PWA on `http://localhost:3001`.
 
 ## Environment
 
-Use `.env` only for secrets and runtime configuration. `.env.example` contains the full supported baseline, including:
+Use `.env` only for secrets and runtime configuration. `.env.example` covers the supported baseline, including:
 
-- exchange selection: `EXCHANGE=bybit|binance`
-- timeframe: `TIMEFRAME=5m`
-- tracked symbols: `SYMBOLS=BTC/USDT,ETH/USDT,SOL/USDT`
-- dry-run enforcement: `DRY_RUN=true`
-- strategy parameters: `SIGNAL_N=96`, `SIGNAL_K=5`, `SIGNAL_H_BARS=72`
-- simulation settings: fees, slippage, fixed USDT sizing
-- risk controls: `MAX_OPEN_POSITIONS`, `COOLDOWN_BARS`, `MAX_DAILY_DRAWDOWN_PCT`, `MAX_CONSECUTIVE_LOSSES`
+- database connectivity: `DATABASE_URL`
+- runtime behavior: `ENABLE_CANDLE_STORAGE`, `RUNNER_AUTOSTART`, `LOG_LEVEL`
 - PWA auth: `ADMIN_PASSWORD`, `SESSION_SECRET`, `SESSION_TTL_HOURS`
 - push configuration: `WEB_PUSH_VAPID_*`
+
+Trading symbols plus exchange, strategy, execution, and risk settings now live in MySQL on the `symbols` table. On first boot the API seeds default rows for `BTC/USDT`, `ETH/USDT`, and `SOL/USDT`, and you can edit or add symbols from the PWA settings screen.
 
 ## Commands
 
@@ -111,7 +108,9 @@ Use `.env` only for secrets and runtime configuration. `.env.example` contains t
 - `POST /runs/start`
 - `POST /runs/stop`
 - `GET /symbols`
+- `POST /symbols`
 - `PUT /symbols`
+- `PUT /symbols/:id`
 - `GET /signals/recent`
 - `GET /positions/open`
 - `GET /trades/recent`
@@ -134,7 +133,7 @@ The repository includes:
 
 ## Notes
 
-- V1 hard-enforces `DRY_RUN=true` at startup.
+- The system still executes simulated orders only; symbol `dry_run` is stored in the database for configuration parity and future live-trading work.
 - The PWA now uses a single shared admin password and a signed session cookie.
 - The execution adapter is already isolated so a future live-trading adapter can replace the dry-run implementation without rewriting the strategy core.
 - HTTPS is required in production for Web Push behavior in the PWA.
