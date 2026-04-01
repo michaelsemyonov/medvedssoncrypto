@@ -15,17 +15,33 @@ function toTimestamp(value: unknown): number {
   return 0;
 }
 
+function compareTradesDesc(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>
+): number {
+  const exitTimeDiff = toTimestamp(right.exit_time) - toTimestamp(left.exit_time);
+
+  if (exitTimeDiff !== 0) {
+    return exitTimeDiff;
+  }
+
+  const updatedAtDiff =
+    toTimestamp(right.updated_at) - toTimestamp(left.updated_at);
+
+  if (updatedAtDiff !== 0) {
+    return updatedAtDiff;
+  }
+
+  return toTimestamp(right.created_at) - toTimestamp(left.created_at);
+}
+
 export default async function TradesPage() {
   const { data, unavailable } = await fetchApiWithFallback<{
     trades: Array<Record<string, unknown>>;
   }>('/trades?limit=100', {
     trades: [],
   });
-  const trades = [...data.trades].sort((left, right) => {
-    const leftExitTime = toTimestamp(left.exit_time);
-    const rightExitTime = toTimestamp(right.exit_time);
-    return rightExitTime - leftExitTime;
-  });
+  const trades = [...data.trades].sort(compareTradesDesc);
 
   return (
     <section className="card">

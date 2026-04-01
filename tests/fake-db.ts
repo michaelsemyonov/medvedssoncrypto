@@ -129,6 +129,26 @@ type PushSubscriptionRow = PushSubscriptionRecord & {
   updated_at: Date;
 };
 
+const compareClosedPositionsDesc = (
+  left: Pick<PositionRow, 'exit_time' | 'updated_at' | 'created_at'>,
+  right: Pick<PositionRow, 'exit_time' | 'updated_at' | 'created_at'>
+): number => {
+  const exitTimeDiff =
+    (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0);
+
+  if (exitTimeDiff !== 0) {
+    return exitTimeDiff;
+  }
+
+  const updatedAtDiff = right.updated_at.getTime() - left.updated_at.getTime();
+
+  if (updatedAtDiff !== 0) {
+    return updatedAtDiff;
+  }
+
+  return right.created_at.getTime() - left.created_at.getTime();
+};
+
 export class FakeMedvedssonDatabase {
   private runs: RunRow[] = [];
   private symbols: SymbolRow[] = [];
@@ -802,10 +822,7 @@ export class FakeMedvedssonDatabase {
   ): Promise<Array<PositionRow & { symbol: string }>> {
     return this.positions
       .filter((item) => item.status === 'CLOSED')
-      .sort(
-        (left, right) =>
-          (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0)
-      )
+      .sort(compareClosedPositionsDesc)
       .slice(0, limit)
       .map((position) => ({
         ...position,

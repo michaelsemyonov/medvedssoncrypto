@@ -142,4 +142,136 @@ describe('database integration', () => {
     expect((await db.getRecentSignals()).length).toBe(0);
     await db.close();
   });
+
+  it('returns recent trades in descending order when exit timestamps match', async () => {
+    vi.useFakeTimers();
+
+    const db = createFakeDatabase();
+    const config = buildTestConfig();
+
+    try {
+      await db.migrate();
+      const run = await db.startRun(config);
+      const [btc, eth] = await db.replaceActiveSymbols(config.exchange, [
+        'BTC/USDT',
+        'ETH/USDT',
+      ]);
+
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      const btcOpenOrder = await db.createPendingOrder({
+        runId: run.id,
+        signalId: 'btc-open',
+        symbolId: btc!.id,
+        orderType: 'MARKET',
+        side: 'BUY',
+        intent: 'OPEN_POSITION',
+        referencePrice: 100,
+        qty: 1,
+        notionalUsdt: 100,
+        slippageBps: 0,
+        feeRate: 0.001,
+        feeAmount: 0.1,
+        fillModel: 'next_open',
+        meta: {},
+      });
+      await db.fillPendingOrder(
+        btcOpenOrder!.id,
+        100,
+        '2026-01-01T00:05:00.000Z'
+      );
+
+      vi.setSystemTime(new Date('2026-01-01T00:00:01.000Z'));
+      const ethOpenOrder = await db.createPendingOrder({
+        runId: run.id,
+        signalId: 'eth-open',
+        symbolId: eth!.id,
+        orderType: 'MARKET',
+        side: 'BUY',
+        intent: 'OPEN_POSITION',
+        referencePrice: 200,
+        qty: 1,
+        notionalUsdt: 200,
+        slippageBps: 0,
+        feeRate: 0.001,
+        feeAmount: 0.2,
+        fillModel: 'next_open',
+        meta: {},
+      });
+      await db.fillPendingOrder(
+        ethOpenOrder!.id,
+        200,
+        '2026-01-01T00:05:00.000Z'
+      );
+
+      const openPositions = await db.getOpenPositions(run.id);
+      const btcPosition = openPositions.find(
+        (position) => position.symbol === 'BTC/USDT'
+      );
+      const ethPosition = openPositions.find(
+        (position) => position.symbol === 'ETH/USDT'
+      );
+
+      vi.setSystemTime(new Date('2026-01-02T00:00:00.000Z'));
+      const btcCloseOrder = await db.createPendingOrder({
+        runId: run.id,
+        signalId: 'btc-close',
+        symbolId: btc!.id,
+        orderType: 'MARKET',
+        side: 'SELL',
+        intent: 'CLOSE_POSITION',
+        referencePrice: 101,
+        qty: 1,
+        notionalUsdt: 101,
+        slippageBps: 0,
+        feeRate: 0.001,
+        feeAmount: 0.101,
+        fillModel: 'next_open',
+        positionId: btcPosition!.id,
+        meta: {
+          position_id: btcPosition!.id,
+        },
+      });
+      await db.fillPendingOrder(
+        btcCloseOrder!.id,
+        101,
+        '2026-01-02T00:05:00.000Z'
+      );
+
+      vi.setSystemTime(new Date('2026-01-02T00:00:01.000Z'));
+      const ethCloseOrder = await db.createPendingOrder({
+        runId: run.id,
+        signalId: 'eth-close',
+        symbolId: eth!.id,
+        orderType: 'MARKET',
+        side: 'SELL',
+        intent: 'CLOSE_POSITION',
+        referencePrice: 202,
+        qty: 1,
+        notionalUsdt: 202,
+        slippageBps: 0,
+        feeRate: 0.001,
+        feeAmount: 0.202,
+        fillModel: 'next_open',
+        positionId: ethPosition!.id,
+        meta: {
+          position_id: ethPosition!.id,
+        },
+      });
+      await db.fillPendingOrder(
+        ethCloseOrder!.id,
+        202,
+        '2026-01-02T00:05:00.000Z'
+      );
+
+      const trades = await db.getRecentTrades();
+
+      expect(trades.map((trade) => trade.symbol).slice(0, 2)).toEqual([
+        'ETH/USDT',
+        'BTC/USDT',
+      ]);
+    } finally {
+      await db.close();
+      vi.useRealTimers();
+    }
+  });
 });
