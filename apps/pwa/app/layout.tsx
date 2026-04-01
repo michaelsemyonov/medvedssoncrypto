@@ -42,10 +42,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <main className="shell">
           <section className="hero">
-            <div className="hero-topbar">
-              <div className="eyebrow">MedvedssonCrypto</div>
-              <HeaderSignOutButton />
-            </div>
+            <div className="eyebrow">MedvedssonCrypto</div>
             <nav className="hero-nav">
               <Link className="hero-link" href="/">
                 Dashboard
@@ -62,6 +59,7 @@ export default function RootLayout({
               <Link className="hero-link" href="/settings">
                 Settings
               </Link>
+              <HeaderSignOutButton />
             </nav>
           </section>
           {children}
