@@ -5,6 +5,7 @@ import { createDatabase } from '@medvedsson/db';
 import { MarketDataAdapter } from '@medvedsson/market-data';
 import { NotificationService } from '@medvedsson/notifications';
 import {
+  getDayBoundsInTimeZone,
   getBearerToken,
   loadConfig,
   normalizeSymbol,
@@ -27,6 +28,7 @@ const paginationQuerySchema = z.object({
 const SIGNAL_CHART_CANDLE_COUNT = 12;
 const POSITION_CHART_CANDLE_COUNT = 24;
 const POSITION_CHART_TIMEFRAME: Timeframe = '15m';
+const DASHBOARD_TIME_ZONE = 'Europe/Stockholm';
 
 const symbolUpdateSchema = z.object({
   exchange: z.enum(['bybit', 'binance']).default('bybit'),
@@ -410,6 +412,7 @@ export const buildApp = async () => {
     const runs = await db.listRuns();
     const symbols = await db.listSymbols();
     const positions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
+    const today = getDayBoundsInTimeZone(new Date(), DASHBOARD_TIME_ZONE);
     const startingEquity = symbols
       .filter((symbol) => symbol.active)
       .reduce((sum, symbol) => sum + Number(symbol.equity_start_usdt), 0);
@@ -429,6 +432,11 @@ export const buildApp = async () => {
       activeSymbols: symbols.filter((symbol) => symbol.active),
       latestSignals: await db.getLatestSignalsBySymbol(),
       openPositionsCount: positions.length,
+      todayRealizedPnl: await db.getRealizedPnlBetween(
+        today.start,
+        today.end,
+        null
+      ),
       stats,
       runner: runner.getStatus(),
     };

@@ -3,6 +3,9 @@ import { formatDateTime } from '@/lib/datetime.ts';
 
 export const dynamic = 'force-dynamic';
 
+const formatSignedPnl = (value: number): string =>
+  `${value >= 0 ? '+' : ''}${value.toFixed(2)} USDT`;
+
 export default async function DashboardPage() {
   const { data: dashboard, unavailable } = await fetchApiWithFallback<{
     activeSymbols: Array<{ symbol: string }>;
@@ -14,6 +17,7 @@ export default async function DashboardPage() {
       approved: boolean | null;
     }>;
     openPositionsCount: number;
+    todayRealizedPnl: number;
     stats: {
       closedTrades: number;
       winRate: number;
@@ -31,6 +35,7 @@ export default async function DashboardPage() {
     activeSymbols: [],
     latestSignals: [],
     openPositionsCount: 0,
+    todayRealizedPnl: 0,
     stats: {
       closedTrades: 0,
       winRate: 0,
@@ -60,12 +65,12 @@ export default async function DashboardPage() {
 
       <section className="grid">
         <article className="card">
-          <div className="eyebrow">Tracked Symbols</div>
-          <div className="metric">{dashboard.activeSymbols.length}</div>
+          <div className="eyebrow">Today's PnL</div>
+          <div className="metric">
+            {formatSignedPnl(dashboard.todayRealizedPnl)}
+          </div>
           <p className="muted">
-            {dashboard.activeSymbols
-              .map((symbol) => symbol.symbol)
-              .join(', ') || 'No symbols configured'}
+            Realized PnL for trades closed today.
           </p>
         </article>
         <article className="card">

@@ -21,7 +21,6 @@ import {
   normalizeSymbol,
   round,
   SIGNAL_TYPES,
-  utcDateKey,
 } from '@medvedsson/shared';
 import mysql from 'mysql2/promise';
 
@@ -1330,16 +1329,24 @@ export class MedvedssonDatabase {
     return Number(rows[0]?.drawdown_pct ?? 0);
   }
 
-  async getDailyRealizedPnl(runId: string, isoTime: string): Promise<number> {
-    const day = utcDateKey(isoTime);
+  async getRealizedPnlBetween(
+    startTime: string,
+    endTime: string,
+    runId: string | null = null
+  ): Promise<number> {
+    const runFilter = runId === null ? '' : ' AND strategy_run_id = ?';
+    const params =
+      runId === null
+        ? [toMysqlDateTime(startTime), toMysqlDateTime(endTime)]
+        : [toMysqlDateTime(startTime), toMysqlDateTime(endTime), runId];
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT COALESCE(SUM(realized_pnl), 0) AS total
        FROM positions
-       WHERE strategy_run_id = ?
-         AND status = 'CLOSED'
-         AND DATE(exit_time) = ?`,
-      [runId, day]
+       WHERE status = 'CLOSED'
+         AND exit_time >= ?
+         AND exit_time < ?${runFilter}`,
+      params
     );
 
     return Number(rows[0]?.total ?? 0);

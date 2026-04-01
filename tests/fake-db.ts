@@ -912,15 +912,22 @@ export class FakeMedvedssonDatabase {
     );
   }
 
-  async getDailyRealizedPnl(runId: string, isoTime: string): Promise<number> {
-    const day = isoTime.slice(0, 10);
+  async getRealizedPnlBetween(
+    startTime: string,
+    endTime: string,
+    runId: string | null = null
+  ): Promise<number> {
+    const start = new Date(startTime).getTime();
+    const end = new Date(endTime).getTime();
 
     return this.positions
       .filter(
         (item) =>
-          item.strategy_run_id === runId &&
           item.status === 'CLOSED' &&
-          item.exit_time?.toISOString().slice(0, 10) === day
+          item.exit_time !== null &&
+          item.exit_time.getTime() >= start &&
+          item.exit_time.getTime() < end &&
+          (runId === null || item.strategy_run_id === runId)
       )
       .reduce((sum, item) => sum + (item.realized_pnl ?? 0), 0);
   }
