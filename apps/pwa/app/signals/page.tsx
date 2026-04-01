@@ -1,4 +1,5 @@
 import { fetchApiWithFallback } from '@/lib/api.ts';
+import { formatDateTime } from '@/lib/datetime.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,7 @@ export default async function SignalsPage() {
                 <td data-label="Symbol">{String(signal.symbol)}</td>
                 <td data-label="Type">{String(signal.signal_type)}</td>
                 <td data-label="Time">
-                  {new Date(String(signal.candle_close_time)).toLocaleString()}
+                  {formatDateTime(String(signal.candle_close_time))}
                 </td>
                 <td data-label="Approved">
                   <span className={signal.approved ? 'pill' : 'pill pill-warn'}>

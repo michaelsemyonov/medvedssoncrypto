@@ -1,4 +1,5 @@
 import { fetchApiWithFallback } from '@/lib/api.ts';
+import { formatDateTime } from '@/lib/datetime.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,9 +42,7 @@ export default async function PositionsPage() {
             <tr key={String(position.id)}>
               <td data-label="Symbol">{String(position.symbol)}</td>
               <td data-label="Side">{String(position.side)}</td>
-              <td data-label="Entry Time">
-                {new Date(String(position.entry_time)).toLocaleString()}
-              </td>
+              <td data-label="Entry Time">{formatDateTime(position.entry_time)}</td>
               <td data-label="Entry Price">
                 {Number(position.entry_price).toFixed(4)}
               </td>

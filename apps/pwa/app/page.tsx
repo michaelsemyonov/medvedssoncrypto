@@ -1,4 +1,5 @@
 import { fetchApiWithFallback } from '@/lib/api.ts';
+import { formatDateTime } from '@/lib/datetime.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,7 +91,11 @@ export default async function DashboardPage() {
           <p className="muted">
             {dashboard.runner.lastError
               ? dashboard.runner.lastError
-              : `Last tick ${dashboard.runner.lastTickCompletedAt ?? 'not yet completed'}`}
+              : `Last tick ${
+                  dashboard.runner.lastTickCompletedAt
+                    ? formatDateTime(dashboard.runner.lastTickCompletedAt)
+                    : 'not yet completed'
+                }`}
           </p>
         </article>
       </section>
@@ -118,9 +123,7 @@ export default async function DashboardPage() {
               <tr key={item.symbol}>
                 <td data-label="Symbol">{item.symbol}</td>
                 <td data-label="Signal">{item.signal_type}</td>
-                <td data-label="Time">
-                  {new Date(item.candle_close_time).toLocaleString()}
-                </td>
+                <td data-label="Time">{formatDateTime(item.candle_close_time)}</td>
                 <td data-label="Approval">
                   <span className={item.approved ? 'pill' : 'pill pill-warn'}>
                     {item.approved === null
