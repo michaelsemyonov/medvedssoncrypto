@@ -1278,9 +1278,14 @@ export class MedvedssonDatabase {
   }
 
   async getStatsSummary(
-    runId: string,
+    runId: string | null,
     startingEquity: number
   ): Promise<Record<string, number>> {
+    const runFilter =
+      runId === null ? '' : 'WHERE strategy_run_id = ?';
+    const drawdownFilter =
+      runId === null ? '' : ' WHERE strategy_run_id = ?';
+    const params = runId === null ? [] : [runId, runId];
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT
@@ -1288,10 +1293,10 @@ export class MedvedssonDatabase {
          SUM(CASE WHEN status = 'CLOSED' AND realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
          AVG(CASE WHEN status = 'CLOSED' THEN realized_pnl / NULLIF(notional_usdt, 0) END) AS avg_return,
          SUM(CASE WHEN status = 'CLOSED' THEN realized_pnl ELSE 0 END) AS total_realized,
-         (SELECT MAX(drawdown_pct) FROM equity_snapshots WHERE strategy_run_id = ?) AS max_drawdown
+         (SELECT MAX(drawdown_pct) FROM equity_snapshots${drawdownFilter}) AS max_drawdown
        FROM positions
-       WHERE strategy_run_id = ?`,
-      [runId, runId]
+       ${runFilter}`,
+      params
     );
 
     const row = rows[0];

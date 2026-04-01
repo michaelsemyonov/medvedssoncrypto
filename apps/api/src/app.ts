@@ -43,15 +43,6 @@ const pushUnsubscribeSchema = z.object({
   endpoint: z.string().url()
 });
 
-type StatsRun = {
-  id: string;
-};
-
-export const selectStatsRun = <TRun extends StatsRun>(
-  activeRun: TRun | null,
-  runs: TRun[]
-): TRun | null => activeRun ?? runs[0] ?? null;
-
 const parseOrReply = <TSchema extends z.ZodTypeAny>(schema: TSchema, input: unknown): z.infer<TSchema> => {
   const parsed = schema.safeParse(input);
 
@@ -250,13 +241,9 @@ export const buildApp = async () => {
   });
 
   app.get('/stats/summary', async () => {
-    const activeRun = await db.getActiveRun();
-    const run = selectStatsRun(
-      activeRun,
-      activeRun ? [] : await db.listRuns()
-    );
+    const runs = await db.listRuns();
 
-    if (!run) {
+    if (runs.length === 0) {
       return {
         stats: {
           closedTrades: 0,
@@ -270,7 +257,7 @@ export const buildApp = async () => {
     }
 
     return {
-      stats: await db.getStatsSummary(run.id, config.execution.equityStartUsdt)
+      stats: await db.getStatsSummary(null, config.execution.equityStartUsdt)
     };
   });
 
@@ -300,13 +287,10 @@ export const buildApp = async () => {
 
   app.get('/dashboard', async () => {
     const activeRun = await db.getActiveRun();
-    const statsRun = selectStatsRun(
-      activeRun,
-      activeRun ? [] : await db.listRuns()
-    );
+    const runs = await db.listRuns();
     const positions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
-    const stats = statsRun
-      ? await db.getStatsSummary(statsRun.id, config.execution.equityStartUsdt)
+    const stats = runs.length > 0
+      ? await db.getStatsSummary(null, config.execution.equityStartUsdt)
       : {
           closedTrades: 0,
           winRate: 0,

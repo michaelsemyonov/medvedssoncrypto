@@ -22,6 +22,28 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  color: var(--text);
+}
+
+html {
+  background-color: #06101a;
+}
+
+body {
+  font-family: var(--font-space-grotesk), sans-serif;
+  position: relative;
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  background: transparent;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background-color: #06101a;
   background:
     radial-gradient(
@@ -35,15 +57,8 @@ body {
       transparent 26%
     ),
     linear-gradient(180deg, #06101a 0%, #091728 100%);
-  color: var(--text);
-}
-
-body {
-  font-family: var(--font-space-grotesk), sans-serif;
-  padding-top: env(safe-area-inset-top);
-  padding-right: env(safe-area-inset-right);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
+  background-attachment: fixed;
+  pointer-events: none;
 }
 
 h1,

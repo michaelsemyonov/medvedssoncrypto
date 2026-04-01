@@ -816,11 +816,13 @@ export class FakeMedvedssonDatabase {
   }
 
   async getStatsSummary(
-    runId: string,
+    runId: string | null,
     startingEquity: number
   ): Promise<Record<string, number>> {
     const closedTrades = this.positions.filter(
-      (item) => item.strategy_run_id === runId && item.status === 'CLOSED'
+      (item) =>
+        item.status === 'CLOSED' &&
+        (runId === null || item.strategy_run_id === runId)
     );
     const wins = closedTrades.filter(
       (item) => (item.realized_pnl ?? 0) > 0
@@ -832,7 +834,7 @@ export class FakeMedvedssonDatabase {
     const maxDrawdown = Math.max(
       0,
       ...this.equitySnapshots
-        .filter((item) => item.strategy_run_id === runId)
+        .filter((item) => runId === null || item.strategy_run_id === runId)
         .map((item) => item.drawdown_pct)
     );
 
