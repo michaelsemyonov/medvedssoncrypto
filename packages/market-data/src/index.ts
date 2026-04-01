@@ -169,7 +169,7 @@ export class MarketDataAdapter {
 
   private async fetchBybitCandles(symbol: string, timeframe: Timeframe, limit: number): Promise<Candle[]> {
     const market = symbolToExchangeMarket(symbol);
-    const interval = timeframe === '5m' ? '5' : timeframe;
+    const interval = timeframe.endsWith('m') ? timeframe.slice(0, -1) : timeframe;
     const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${market}&interval=${interval}&limit=${limit}`;
     const payload = await this.fetchJson<{
       result?: {

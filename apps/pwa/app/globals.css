@@ -171,9 +171,24 @@ a {
   margin-top: 18px;
 }
 
+.position-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
 .signal-card {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 340px);
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.position-card {
+  display: grid;
   gap: 18px;
   padding: 18px;
   border: 1px solid var(--line);

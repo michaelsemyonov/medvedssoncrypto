@@ -2,11 +2,15 @@ import type { OrderIntent, OrderSide, PositionSide, SignalType, Timeframe } from
 import { ORDER_INTENTS, ORDER_SIDES, POSITION_SIDES, SIGNAL_TYPES } from './types.ts';
 
 export const timeframeToMs = (timeframe: Timeframe): number => {
-  if (timeframe !== '5m') {
-    throw new Error('Unsupported timeframe.');
+  if (timeframe === '5m') {
+    return 5 * 60 * 1000;
   }
 
-  return 5 * 60 * 1000;
+  if (timeframe === '15m') {
+    return 15 * 60 * 1000;
+  }
+
+  throw new Error('Unsupported timeframe.');
 };
 
 export const parseSymbols = (value: string): string[] =>

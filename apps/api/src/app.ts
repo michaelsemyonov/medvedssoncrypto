@@ -10,6 +10,7 @@ import {
   normalizeSymbol,
   parseCookieHeader,
   SESSION_COOKIE_NAME,
+  type Timeframe,
   type PushSubscriptionRecord,
   verifySessionToken,
 } from '@medvedsson/shared';
@@ -23,6 +24,8 @@ const paginationQuerySchema = z.object({
 });
 
 const SIGNAL_CHART_CANDLE_COUNT = 12;
+const POSITION_CHART_CANDLE_COUNT = 24;
+const POSITION_CHART_TIMEFRAME: Timeframe = '15m';
 
 const symbolUpdateSchema = z.object({
   symbols: z.array(z.string().min(1)).default([]),
@@ -329,10 +332,47 @@ export const buildApp = async () => {
     };
   });
 
-  app.get('/positions', async () => {
+  app.get('/positions', async (request) => {
     const run = await db.getActiveRun();
+
+    if (!run) {
+      return {
+        positions: [],
+      };
+    }
+
+    const positions = await db.getOpenPositions(run.id);
+    const positionsWithCandles = await Promise.all(
+      positions.map(async (position) => {
+        try {
+          return {
+            ...position,
+            recent_candles: await marketData.fetchRecentCandles(
+              position.symbol,
+              POSITION_CHART_TIMEFRAME,
+              POSITION_CHART_CANDLE_COUNT
+            ),
+          };
+        } catch (error) {
+          request.log.warn(
+            {
+              err: error,
+              symbol: position.symbol,
+              timeframe: POSITION_CHART_TIMEFRAME,
+            },
+            'Open position chart candle fetch failed.'
+          );
+
+          return {
+            ...position,
+            recent_candles: [],
+          };
+        }
+      })
+    );
+
     return {
-      positions: run ? await db.getOpenPositions(run.id) : [],
+      positions: positionsWithCandles,
     };
   });
 

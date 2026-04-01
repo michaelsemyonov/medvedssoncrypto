@@ -1,4 +1,4 @@
-import { SignalCandleChart } from '@/components/signal-candle-chart.tsx';
+import { CandleChart } from '@/components/candle-chart.tsx';
 import { fetchApiWithFallback } from '@/lib/api.ts';
 import { formatDateTime } from '@/lib/datetime.ts';
 
@@ -93,7 +93,15 @@ export default async function SignalsPage() {
                   </div>
                 </div>
               </div>
-              <SignalCandleChart candles={signal.recent_candles} />
+              <CandleChart
+                ariaLabel="Candlestick chart for the latest 60 minutes before the signal"
+                candles={signal.recent_candles}
+                emptyMessage="No stored candles are available for this signal yet."
+                footerLabel="Signal candle highlighted"
+                highlightLastCandle
+                summary={`${signal.recent_candles.length}/12 candles`}
+                title="Latest 60 min"
+              />
             </article>
           ))}
         </div>

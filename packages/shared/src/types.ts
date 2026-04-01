@@ -44,7 +44,7 @@ export const ORDER_SIDES = {
 
 export type OrderSide = (typeof ORDER_SIDES)[keyof typeof ORDER_SIDES];
 
-export type Timeframe = '5m';
+export type Timeframe = '5m' | '15m';
 
 export type Candle = {
   exchange: string;
