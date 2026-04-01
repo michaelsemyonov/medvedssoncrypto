@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
 import Link from 'next/link';
 
@@ -20,6 +20,16 @@ export const metadata: Metadata = {
   title: 'MedvedssonCrypto',
   description:
     'Dry-run crypto signal monitoring, trade simulation, and PWA notifications.',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'MedvedssonCrypto',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#06101a',
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

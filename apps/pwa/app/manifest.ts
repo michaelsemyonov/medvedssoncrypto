@@ -7,14 +7,14 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Dry-run crypto signal and push notification dashboard.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#07111d',
-    theme_color: '#14b8a6',
+    background_color: '#06101a',
+    theme_color: '#06101a',
     icons: [
       {
         src: '/icon.svg',
         sizes: 'any',
-        type: 'image/svg+xml'
-      }
-    ]
+        type: 'image/svg+xml',
+      },
+    ],
   };
 }
