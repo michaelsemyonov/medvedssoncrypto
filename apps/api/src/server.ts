@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { buildApp } from './app.ts';
 
 const main = async () => {
-  const { app, config } = await buildApp();
+  const { app, config, runner } = await buildApp();
 
   const close = async () => {
     await app.close();
@@ -22,6 +22,12 @@ const main = async () => {
     host: '0.0.0.0',
     port: config.port
   });
+
+  if (config.runnerAutostart) {
+    void runner.start().catch((error) => {
+      app.log.error({ err: error }, 'Runner autostart failed.');
+    });
+  }
 };
 
 void main();

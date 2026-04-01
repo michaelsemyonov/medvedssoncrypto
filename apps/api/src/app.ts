@@ -346,9 +346,5 @@ export const buildApp = async () => {
     await db.close();
   });
 
-  if (config.runnerAutostart) {
-    await runner.start();
-  }
-
   return { app, config, runner, db };
 };
