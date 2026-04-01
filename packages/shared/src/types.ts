@@ -179,7 +179,6 @@ export type PushSubscriptionRecord = {
   p256dh: string;
   auth: string;
   enabled: boolean;
-  symbolFilters: string[] | null;
   eventFilters: string[] | null;
   userLabel: string | null;
 };

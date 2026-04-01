@@ -103,6 +103,7 @@ type RecentTradeRow = PositionRow & {
   symbol: string;
   opened_at: Date;
   opening_order_created_at: Date;
+  opening_order_filled_at: Date | null;
 };
 
 type SimulatedOrderRow = {
@@ -116,6 +117,7 @@ type SimulatedOrderRow = {
   intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
   reference_price: number;
   fill_price: number | null;
+  filled_at: Date | null;
   qty: number;
   notional_usdt: number;
   slippage_bps: number;
@@ -324,6 +326,7 @@ const normalizeSimulatedOrderRow = (row: MysqlRow): SimulatedOrderRow => ({
   intent: String(row.intent) as SimulatedOrderRow['intent'],
   reference_price: Number(row.reference_price),
   fill_price: row.fill_price === null ? null : Number(row.fill_price),
+  filled_at: parseDate(row.filled_at),
   qty: Number(row.qty),
   notional_usdt: Number(row.notional_usdt),
   slippage_bps: Number(row.slippage_bps),
@@ -1088,9 +1091,9 @@ export class MedvedssonDatabase {
       await execute(
         client,
         `UPDATE simulated_orders
-         SET fill_price = ?, status = 'FILLED'
+         SET fill_price = ?, filled_at = ?, status = 'FILLED'
          WHERE id = ?`,
-        [finalFillPrice, order.id]
+        [finalFillPrice, toMysqlDateTime(fillTime), order.id]
       );
 
       if (order.intent === 'OPEN_POSITION') {
@@ -1366,7 +1369,8 @@ export class MedvedssonDatabase {
          p.*,
          s.symbol,
          os.candle_close_time AS opening_signal_time,
-         oo.created_at AS opening_order_created_at
+         oo.created_at AS opening_order_created_at,
+         oo.filled_at AS opening_order_filled_at
        FROM positions p
        INNER JOIN symbols s ON s.id = p.symbol_id
        INNER JOIN signals os ON os.id = p.opened_by_signal_id
@@ -1390,6 +1394,7 @@ export class MedvedssonDatabase {
         symbol: String(row.symbol),
         opened_at: resolveTradeOpenedAt(position, openingSignalTime),
         opening_order_created_at: parseDate(row.opening_order_created_at)!,
+        opening_order_filled_at: parseDate(row.opening_order_filled_at),
       };
     });
   }
@@ -1489,9 +1494,7 @@ export class MedvedssonDatabase {
         subscription.p256dh,
         subscription.auth,
         subscription.enabled,
-        subscription.symbolFilters
-          ? JSON.stringify(subscription.symbolFilters)
-          : null,
+        null,
         subscription.eventFilters
           ? JSON.stringify(subscription.eventFilters)
           : null,
@@ -1510,7 +1513,7 @@ export class MedvedssonDatabase {
   }
 
   async getPushSubscriptionsForEvent(
-    symbol: string,
+    _symbol: string,
     eventType: string
   ): Promise<PushSubscriptionRow[]> {
     const rows = await query<MysqlRow>(
@@ -1519,17 +1522,11 @@ export class MedvedssonDatabase {
        FROM push_subscriptions
        WHERE enabled = TRUE
          AND (
-           symbol_filters IS NULL
-           OR JSON_LENGTH(symbol_filters) = 0
-           OR JSON_CONTAINS(symbol_filters, JSON_QUOTE(?))
-           OR JSON_CONTAINS(symbol_filters, JSON_QUOTE('*'))
-         )
-         AND (
            event_filters IS NULL
            OR JSON_LENGTH(event_filters) = 0
            OR JSON_CONTAINS(event_filters, JSON_QUOTE(?))
          )`,
-      [symbol, eventType]
+      [eventType]
     );
 
     return rows.map(normalizePushSubscriptionRow);

@@ -180,4 +180,26 @@ export const MIGRATIONS: Array<{ id: string; sql: string }> = [
       );
     `,
   },
+  {
+    id: '002_simulated_orders_filled_at',
+    sql: `
+      ALTER TABLE simulated_orders
+      ADD COLUMN filled_at DATETIME(3) NULL AFTER fill_price;
+
+      UPDATE simulated_orders oo
+      INNER JOIN positions p ON p.opened_by_signal_id = oo.signal_id
+      SET oo.filled_at = p.entry_time
+      WHERE oo.intent = 'OPEN_POSITION'
+        AND oo.status = 'FILLED'
+        AND oo.filled_at IS NULL;
+
+      UPDATE simulated_orders oo
+      INNER JOIN positions p ON p.id = oo.position_id
+      SET oo.filled_at = p.exit_time
+      WHERE oo.intent = 'CLOSE_POSITION'
+        AND oo.status = 'FILLED'
+        AND oo.filled_at IS NULL
+        AND p.exit_time IS NOT NULL;
+    `,
+  },
 ];

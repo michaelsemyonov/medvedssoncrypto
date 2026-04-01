@@ -9,7 +9,7 @@
 - `signals`: persisted actionable signals only
 - `risk_events`: approval and rejection trail for each signal
 - `positions`: dry-run open and closed positions
-- `simulated_orders`: pending and filled virtual order journal
+- `simulated_orders`: pending and filled virtual order journal, including order creation and fill timestamps
 - `equity_snapshots`: equity curve and drawdown support
 - `push_subscriptions`: PWA web-push subscribers
 

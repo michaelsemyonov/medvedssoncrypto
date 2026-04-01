@@ -5,7 +5,6 @@ import { useState } from 'react';
 type SettingsClientProps = {
   apiUnavailable: boolean;
   vapidPublicKey: string;
-  symbols: string[];
 };
 
 const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
@@ -16,8 +15,7 @@ const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
   return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
 };
 
-export function SettingsClient({ apiUnavailable, vapidPublicKey, symbols }: SettingsClientProps) {
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(symbols);
+export function SettingsClient({ apiUnavailable, vapidPublicKey }: SettingsClientProps) {
   const [status, setStatus] = useState<string>('Idle');
 
   const subscribe = async () => {
@@ -51,7 +49,6 @@ export function SettingsClient({ apiUnavailable, vapidPublicKey, symbols }: Sett
       },
       body: JSON.stringify({
         subscription,
-        symbolFilters: selectedSymbols,
         eventFilters: ['entry', 'exit', 'runner_error']
       })
     });
@@ -103,7 +100,7 @@ export function SettingsClient({ apiUnavailable, vapidPublicKey, symbols }: Sett
     <div className="stack-lg">
       <div className="card">
         <h2>Push Notifications</h2>
-        <p className="muted">Signals arrive as web push alerts. Execution stays dry-run only in V1.</p>
+        <p className="muted">Approved signals across all symbols arrive as web push alerts. Execution stays dry-run only in V1.</p>
         {apiUnavailable ? (
           <p className="status-line">Settings are temporarily degraded while the backend API reconnects.</p>
         ) : null}
@@ -119,33 +116,6 @@ export function SettingsClient({ apiUnavailable, vapidPublicKey, symbols }: Sett
           </button>
         </div>
         <p className="status-line">{status}</p>
-      </div>
-
-      <div className="card">
-        <h2>Symbol Filters</h2>
-        <p className="muted">Pick which active symbols should trigger push alerts on this device.</p>
-        <div className="chip-grid">
-          {symbols.map((symbol) => {
-            const active = selectedSymbols.includes(symbol);
-
-            return (
-              <button
-                key={symbol}
-                className={active ? 'chip chip-active' : 'chip'}
-                onClick={() =>
-                  setSelectedSymbols((current) =>
-                    current.includes(symbol)
-                      ? current.filter((item) => item !== symbol)
-                      : [...current, symbol]
-                  )
-                }
-                type="button"
-              >
-                {symbol}
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

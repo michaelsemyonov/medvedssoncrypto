@@ -420,6 +420,33 @@ describe('database integration', () => {
     expect(trade?.opening_order_created_at.toISOString()).toBe(
       openOrder!.created_at.toISOString()
     );
+    expect(trade?.opening_order_filled_at?.toISOString()).toBe(
+      '2026-01-01T00:05:00.000Z'
+    );
+
+    await db.close();
+  });
+
+  it('returns entry subscriptions even when legacy symbol filters do not match', async () => {
+    const db = createFakeDatabase();
+
+    await db.migrate();
+    await db.upsertPushSubscription({
+      endpoint: 'https://example.com/push/device-1',
+      p256dh: 'test-p256dh',
+      auth: 'test-auth',
+      enabled: true,
+      eventFilters: ['entry'],
+      userLabel: null,
+    });
+
+    (db as unknown as { pushSubscriptions: Array<{ symbolFilters?: string[] | null }> })
+      .pushSubscriptions[0]!.symbolFilters = ['BTC/USDT'];
+
+    const subscriptions = await db.getPushSubscriptionsForEvent('ETH/USDT', 'entry');
+
+    expect(subscriptions).toHaveLength(1);
+    expect(subscriptions[0]?.endpoint).toBe('https://example.com/push/device-1');
 
     await db.close();
   });

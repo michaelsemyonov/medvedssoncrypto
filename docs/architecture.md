@@ -24,7 +24,7 @@ MedvedssonCrypto is implemented as a modular monolith:
 6. Actionable signals are written to `signals`, then risk checks approve or reject them into `risk_events`.
 7. Approved actionable signals create `PENDING` simulated orders for the next candle open.
 8. Equity snapshots are updated after processing.
-9. Notifications are sent to matching push subscribers.
+9. Notifications are sent to enabled push subscribers for that event type.
 
 ## Restart safety
 

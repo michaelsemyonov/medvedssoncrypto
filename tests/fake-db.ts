@@ -89,6 +89,7 @@ type RecentTradeRow = PositionRow & {
   symbol: string;
   opened_at: Date;
   opening_order_created_at: Date;
+  opening_order_filled_at: Date | null;
 };
 
 type SimulatedOrderRow = {
@@ -102,6 +103,7 @@ type SimulatedOrderRow = {
   intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
   reference_price: number;
   fill_price: number | null;
+  filled_at: Date | null;
   qty: number;
   notional_usdt: number;
   slippage_bps: number;
@@ -137,6 +139,7 @@ type PushSubscriptionRow = PushSubscriptionRecord & {
   id: string;
   created_at: Date;
   updated_at: Date;
+  symbolFilters?: string[] | null;
 };
 
 const compareClosedPositionsDesc = (
@@ -691,6 +694,7 @@ export class FakeMedvedssonDatabase {
       intent: params.intent,
       reference_price: params.referencePrice,
       fill_price: null,
+      filled_at: null,
       qty: params.qty,
       notional_usdt: params.notionalUsdt,
       slippage_bps: params.slippageBps,
@@ -732,6 +736,7 @@ export class FakeMedvedssonDatabase {
     }
 
     order.fill_price = fillPrice;
+    order.filled_at = new Date(fillTime);
     order.status = 'FILLED';
 
     if (order.intent === 'OPEN_POSITION') {
@@ -882,6 +887,12 @@ export class FakeMedvedssonDatabase {
                 item.signal_id === position.opened_by_signal_id &&
                 item.intent === 'OPEN_POSITION'
             )?.created_at ?? position.created_at,
+          opening_order_filled_at:
+            this.simulatedOrders.find(
+              (item) =>
+                item.signal_id === position.opened_by_signal_id &&
+                item.intent === 'OPEN_POSITION'
+            )?.filled_at ?? position.entry_time,
         };
       })
       .sort(compareClosedPositionsDesc)
@@ -971,7 +982,6 @@ export class FakeMedvedssonDatabase {
       existing.p256dh = subscription.p256dh;
       existing.auth = subscription.auth;
       existing.enabled = subscription.enabled;
-      existing.symbolFilters = subscription.symbolFilters;
       existing.eventFilters = subscription.eventFilters;
       existing.updated_at = new Date();
       return;
@@ -997,20 +1007,16 @@ export class FakeMedvedssonDatabase {
   }
 
   async getPushSubscriptionsForEvent(
-    symbol: string,
+    _symbol: string,
     eventType: string
   ): Promise<PushSubscriptionRow[]> {
     return this.pushSubscriptions.filter((subscription) => {
-      const symbolMatch =
-        subscription.symbolFilters === null ||
-        subscription.symbolFilters.length === 0 ||
-        subscription.symbolFilters.includes(symbol);
       const eventMatch =
         subscription.eventFilters === null ||
         subscription.eventFilters.length === 0 ||
         subscription.eventFilters.includes(eventType);
 
-      return subscription.enabled && symbolMatch && eventMatch;
+      return subscription.enabled && eventMatch;
     });
   }
 

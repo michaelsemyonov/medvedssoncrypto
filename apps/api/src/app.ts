@@ -36,7 +36,6 @@ const pushSubscribeSchema = z.object({
       auth: z.string().min(1),
     }),
   }),
-  symbolFilters: z.array(z.string().min(1)).nullable().optional(),
   eventFilters: z.array(z.string().min(1)).nullable().optional(),
   userLabel: z.string().max(255).nullable().optional(),
 });
@@ -278,7 +277,6 @@ export const buildApp = async () => {
       p256dh: body.subscription.keys.p256dh,
       auth: body.subscription.keys.auth,
       enabled: true,
-      symbolFilters: body.symbolFilters?.map(normalizeSymbol) ?? null,
       eventFilters: body.eventFilters ?? null,
       userLabel: body.userLabel ?? null,
     };
@@ -348,9 +346,6 @@ export const buildApp = async () => {
 
   app.get('/settings', async () => ({
     vapidPublicKey: config.webPushVapidPublicKey,
-    symbols: (await db.listSymbols())
-      .filter((symbol) => symbol.active)
-      .map((symbol) => symbol.symbol),
     exchange: config.exchange,
     timeframe: config.timeframe,
     strategyKey: config.strategyKey,
