@@ -60,6 +60,13 @@ export const DEFAULT_SYMBOL_SETTINGS: SymbolRuntimeSettings = {
   maxDailyDrawdownPct: 5,
   maxConsecutiveLosses: 5,
   pollIntervalMs: 15000,
+  trailingProfile: 'balanced',
+  trailingEnabled: true,
+  trailingActivationProfitPct: 1.2,
+  trailingGivebackRatio: 0.35,
+  trailingGivebackMinPct: 0.4,
+  trailingGivebackMaxPct: 1.5,
+  trailingMinLockedProfitPct: 0.4,
 };
 
 const envSchema = z.object({
@@ -109,6 +116,13 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     maxDailyDrawdownPct: defaultSettings.maxDailyDrawdownPct,
     maxConsecutiveLosses: defaultSettings.maxConsecutiveLosses,
     pollIntervalMs: defaultSettings.pollIntervalMs,
+    trailingProfile: defaultSettings.trailingProfile,
+    trailingEnabled: defaultSettings.trailingEnabled,
+    trailingActivationProfitPct: defaultSettings.trailingActivationProfitPct,
+    trailingGivebackRatio: defaultSettings.trailingGivebackRatio,
+    trailingGivebackMinPct: defaultSettings.trailingGivebackMinPct,
+    trailingGivebackMaxPct: defaultSettings.trailingGivebackMaxPct,
+    trailingMinLockedProfitPct: defaultSettings.trailingMinLockedProfitPct,
     defaultSymbols,
     defaultSymbolSettings: defaultSettings,
     enableCandleStorage: parsed.ENABLE_CANDLE_STORAGE,

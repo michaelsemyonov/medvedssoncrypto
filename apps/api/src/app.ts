@@ -37,6 +37,13 @@ const symbolUpdateSchema = z.object({
   symbols: z.array(z.string().min(1)).default([]),
 });
 
+const trailingProfileSchema = z.enum([
+  'conservative',
+  'balanced',
+  'aggressive',
+  'custom',
+]);
+
 const symbolSettingsSchema = z.object({
   symbol: z.string().min(1),
   active: z.boolean().default(true),
@@ -62,6 +69,13 @@ const symbolSettingsSchema = z.object({
   maxOpenPositions: z.coerce.number().int().min(1),
   cooldownBars: z.coerce.number().int().min(0),
   stopLossPct: z.coerce.number().min(0),
+  trailingProfile: trailingProfileSchema,
+  trailingEnabled: z.boolean(),
+  trailingActivationProfitPct: z.coerce.number().min(0),
+  trailingGivebackRatio: z.coerce.number().min(0).max(1),
+  trailingGivebackMinPct: z.coerce.number().min(0),
+  trailingGivebackMaxPct: z.coerce.number().min(0),
+  trailingMinLockedProfitPct: z.coerce.number().min(0),
   maxDailyDrawdownPct: z.coerce.number().min(0),
   maxConsecutiveLosses: z.coerce.number().int().min(0),
   pollIntervalMs: z.coerce.number().int().min(100),
@@ -136,6 +150,13 @@ const toSymbolWriteModel = (input: z.infer<typeof symbolSettingsSchema>) => ({
   maxOpenPositions: input.maxOpenPositions,
   cooldownBars: input.cooldownBars,
   stopLossPct: input.stopLossPct,
+  trailingProfile: input.trailingProfile,
+  trailingEnabled: input.trailingEnabled,
+  trailingActivationProfitPct: input.trailingActivationProfitPct,
+  trailingGivebackRatio: input.trailingGivebackRatio,
+  trailingGivebackMinPct: input.trailingGivebackMinPct,
+  trailingGivebackMaxPct: input.trailingGivebackMaxPct,
+  trailingMinLockedProfitPct: input.trailingMinLockedProfitPct,
   maxDailyDrawdownPct: input.maxDailyDrawdownPct,
   maxConsecutiveLosses: input.maxConsecutiveLosses,
   pollIntervalMs: input.pollIntervalMs,
@@ -435,16 +456,20 @@ export const buildApp = async () => {
             equity: startingEquity,
             maxDrawdownPct: 0,
           };
+    const [todayRealizedPnl, todayCounterOrdersRealizedPnl] =
+      await Promise.all([
+        db.getRealizedPnlBetween(today.start, today.end),
+        db.getRealizedPnlBetween(today.start, today.end, {
+          isCounterPosition: true,
+        }),
+      ]);
 
     return {
       activeSymbols: symbols.filter((symbol) => symbol.active),
       latestSignals: await db.getLatestSignalsBySymbol(),
       openPositionsCount: positions.length,
-      todayRealizedPnl: await db.getRealizedPnlBetween(
-        today.start,
-        today.end,
-        null
-      ),
+      todayCounterOrdersRealizedPnl,
+      todayRealizedPnl,
       stats,
       runner: runner.getStatus(),
     };
@@ -566,6 +591,18 @@ export const buildApp = async () => {
       equityStartUsdt: config.defaultSymbolSettings.execution.equityStartUsdt,
       maxOpenPositions: config.defaultSymbolSettings.maxOpenPositions,
       cooldownBars: config.defaultSymbolSettings.cooldownBars,
+      stopLossPct: config.defaultSymbolSettings.stopLossPct,
+      trailingProfile: config.defaultSymbolSettings.trailingProfile,
+      trailingEnabled: config.defaultSymbolSettings.trailingEnabled,
+      trailingActivationProfitPct:
+        config.defaultSymbolSettings.trailingActivationProfitPct,
+      trailingGivebackRatio: config.defaultSymbolSettings.trailingGivebackRatio,
+      trailingGivebackMinPct:
+        config.defaultSymbolSettings.trailingGivebackMinPct,
+      trailingGivebackMaxPct:
+        config.defaultSymbolSettings.trailingGivebackMaxPct,
+      trailingMinLockedProfitPct:
+        config.defaultSymbolSettings.trailingMinLockedProfitPct,
       maxDailyDrawdownPct: config.defaultSymbolSettings.maxDailyDrawdownPct,
       maxConsecutiveLosses: config.defaultSymbolSettings.maxConsecutiveLosses,
       pollIntervalMs: config.defaultSymbolSettings.pollIntervalMs,

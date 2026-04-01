@@ -33,6 +33,13 @@ export default async function SettingsPage() {
       max_open_positions: number;
       cooldown_bars: number;
       stop_loss_pct: number;
+      trailing_profile: 'conservative' | 'balanced' | 'aggressive' | 'custom';
+      trailing_enabled: boolean;
+      trailing_activation_profit_pct: number;
+      trailing_giveback_ratio: number;
+      trailing_giveback_min_pct: number;
+      trailing_giveback_max_pct: number;
+      trailing_min_locked_profit_pct: number;
       max_daily_drawdown_pct: number;
       max_consecutive_losses: number;
       poll_interval_ms: number;
@@ -63,6 +70,13 @@ export default async function SettingsPage() {
       maxOpenPositions: number;
       cooldownBars: number;
       stopLossPct: number;
+      trailingProfile: 'conservative' | 'balanced' | 'aggressive' | 'custom';
+      trailingEnabled: boolean;
+      trailingActivationProfitPct: number;
+      trailingGivebackRatio: number;
+      trailingGivebackMinPct: number;
+      trailingGivebackMaxPct: number;
+      trailingMinLockedProfitPct: number;
       maxDailyDrawdownPct: number;
       maxConsecutiveLosses: number;
       pollIntervalMs: number;
@@ -95,6 +109,13 @@ export default async function SettingsPage() {
       maxOpenPositions: 5,
       cooldownBars: 3,
       stopLossPct: 2,
+      trailingProfile: 'balanced',
+      trailingEnabled: true,
+      trailingActivationProfitPct: 1.2,
+      trailingGivebackRatio: 0.35,
+      trailingGivebackMinPct: 0.4,
+      trailingGivebackMaxPct: 1.5,
+      trailingMinLockedProfitPct: 0.4,
       maxDailyDrawdownPct: 5,
       maxConsecutiveLosses: 5,
       pollIntervalMs: 15000,

@@ -17,6 +17,7 @@ export default async function DashboardPage() {
       approved: boolean | null;
     }>;
     openPositionsCount: number;
+    todayCounterOrdersRealizedPnl: number;
     todayRealizedPnl: number;
     stats: {
       closedTrades: number;
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
     activeSymbols: [],
     latestSignals: [],
     openPositionsCount: 0,
+    todayCounterOrdersRealizedPnl: 0,
     todayRealizedPnl: 0,
     stats: {
       closedTrades: 0,
@@ -71,6 +73,15 @@ export default async function DashboardPage() {
           </div>
           <p className="muted">
             Realized PnL for trades closed today.
+          </p>
+        </article>
+        <article className="card">
+          <div className="eyebrow">Counter-Orders PnL</div>
+          <div className="metric">
+            {formatSignedPnl(dashboard.todayCounterOrdersRealizedPnl)}
+          </div>
+          <p className="muted">
+            Realized PnL from counter positions closed today.
           </p>
         </article>
         <article className="card">

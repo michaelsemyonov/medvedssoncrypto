@@ -2,6 +2,41 @@
 
 import { useState } from 'react';
 
+type TrailingProfile = 'conservative' | 'balanced' | 'aggressive' | 'custom';
+
+const TRAILING_PRESETS: Record<
+  Exclude<TrailingProfile, 'custom'>,
+  {
+    trailingActivationProfitPct: number;
+    trailingGivebackRatio: number;
+    trailingGivebackMinPct: number;
+    trailingGivebackMaxPct: number;
+    trailingMinLockedProfitPct: number;
+  }
+> = {
+  conservative: {
+    trailingActivationProfitPct: 1.8,
+    trailingGivebackRatio: 0.45,
+    trailingGivebackMinPct: 0.6,
+    trailingGivebackMaxPct: 2.0,
+    trailingMinLockedProfitPct: 0.5,
+  },
+  balanced: {
+    trailingActivationProfitPct: 1.2,
+    trailingGivebackRatio: 0.35,
+    trailingGivebackMinPct: 0.4,
+    trailingGivebackMaxPct: 1.5,
+    trailingMinLockedProfitPct: 0.4,
+  },
+  aggressive: {
+    trailingActivationProfitPct: 0.8,
+    trailingGivebackRatio: 0.25,
+    trailingGivebackMinPct: 0.25,
+    trailingGivebackMaxPct: 1.0,
+    trailingMinLockedProfitPct: 0.25,
+  },
+};
+
 type ApiSymbol = {
   id: string;
   exchange: 'bybit' | 'binance' | 'okx';
@@ -29,6 +64,13 @@ type ApiSymbol = {
   max_open_positions: number;
   cooldown_bars: number;
   stop_loss_pct: number;
+  trailing_profile: TrailingProfile;
+  trailing_enabled: boolean;
+  trailing_activation_profit_pct: number;
+  trailing_giveback_ratio: number;
+  trailing_giveback_min_pct: number;
+  trailing_giveback_max_pct: number;
+  trailing_min_locked_profit_pct: number;
   max_daily_drawdown_pct: number;
   max_consecutive_losses: number;
   poll_interval_ms: number;
@@ -61,6 +103,13 @@ type SymbolDraft = {
   maxOpenPositions: number;
   cooldownBars: number;
   stopLossPct: number;
+  trailingProfile: TrailingProfile;
+  trailingEnabled: boolean;
+  trailingActivationProfitPct: number;
+  trailingGivebackRatio: number;
+  trailingGivebackMinPct: number;
+  trailingGivebackMaxPct: number;
+  trailingMinLockedProfitPct: number;
   maxDailyDrawdownPct: number;
   maxConsecutiveLosses: number;
   pollIntervalMs: number;
@@ -111,6 +160,13 @@ const mapApiSymbolToDraft = (symbol: ApiSymbol): SymbolDraft => ({
   maxOpenPositions: symbol.max_open_positions,
   cooldownBars: symbol.cooldown_bars,
   stopLossPct: symbol.stop_loss_pct,
+  trailingProfile: symbol.trailing_profile,
+  trailingEnabled: symbol.trailing_enabled,
+  trailingActivationProfitPct: symbol.trailing_activation_profit_pct,
+  trailingGivebackRatio: symbol.trailing_giveback_ratio,
+  trailingGivebackMinPct: symbol.trailing_giveback_min_pct,
+  trailingGivebackMaxPct: symbol.trailing_giveback_max_pct,
+  trailingMinLockedProfitPct: symbol.trailing_min_locked_profit_pct,
   maxDailyDrawdownPct: symbol.max_daily_drawdown_pct,
   maxConsecutiveLosses: symbol.max_consecutive_losses,
   pollIntervalMs: symbol.poll_interval_ms,
@@ -148,6 +204,22 @@ type SymbolEditorProps = {
     value: SymbolDraft[TKey]
   ) => void;
   onSubmit: () => void;
+};
+
+const handleProfileChange = (
+  profile: TrailingProfile,
+  onChange: SymbolEditorProps['onChange']
+) => {
+  onChange('trailingProfile', profile);
+
+  if (profile !== 'custom') {
+    const preset = TRAILING_PRESETS[profile];
+    onChange('trailingActivationProfitPct', preset.trailingActivationProfitPct);
+    onChange('trailingGivebackRatio', preset.trailingGivebackRatio);
+    onChange('trailingGivebackMinPct', preset.trailingGivebackMinPct);
+    onChange('trailingGivebackMaxPct', preset.trailingGivebackMaxPct);
+    onChange('trailingMinLockedProfitPct', preset.trailingMinLockedProfitPct);
+  }
 };
 
 function SymbolEditor({
@@ -532,6 +604,119 @@ function SymbolEditor({
         </div>
       </div>
 
+      <div className="settings-section">
+        <h3>Exit / Trailing Profit</h3>
+        <div className="toggle-grid">
+          <label className="toggle-row">
+            <input
+              checked={draft.trailingEnabled}
+              onChange={(event) =>
+                onChange('trailingEnabled', event.target.checked)
+              }
+              type="checkbox"
+            />
+            <span>Trailing Profit Enabled</span>
+          </label>
+        </div>
+        <div className="field-grid">
+          <label className="field-stack">
+            <span>Profile</span>
+            <select
+              className="input"
+              value={draft.trailingProfile}
+              onChange={(event) =>
+                handleProfileChange(
+                  event.target.value as TrailingProfile,
+                  onChange
+                )
+              }
+            >
+              <option value="conservative">Conservative</option>
+              <option value="balanced">Balanced (recommended)</option>
+              <option value="aggressive">Aggressive</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label className="field-stack">
+            <span>Activation Profit %</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="any"
+              value={draft.trailingActivationProfitPct}
+              onChange={(event) => {
+                onChange(
+                  'trailingActivationProfitPct',
+                  Number(event.target.value)
+                );
+                onChange('trailingProfile', 'custom');
+              }}
+            />
+          </label>
+          <label className="field-stack">
+            <span>Giveback Ratio</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              max={1}
+              step="any"
+              value={draft.trailingGivebackRatio}
+              onChange={(event) => {
+                onChange('trailingGivebackRatio', Number(event.target.value));
+                onChange('trailingProfile', 'custom');
+              }}
+            />
+          </label>
+          <label className="field-stack">
+            <span>Giveback Min %</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="any"
+              value={draft.trailingGivebackMinPct}
+              onChange={(event) => {
+                onChange('trailingGivebackMinPct', Number(event.target.value));
+                onChange('trailingProfile', 'custom');
+              }}
+            />
+          </label>
+          <label className="field-stack">
+            <span>Giveback Max %</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="any"
+              value={draft.trailingGivebackMaxPct}
+              onChange={(event) => {
+                onChange('trailingGivebackMaxPct', Number(event.target.value));
+                onChange('trailingProfile', 'custom');
+              }}
+            />
+          </label>
+          <label className="field-stack">
+            <span>Min Locked Profit %</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="any"
+              value={draft.trailingMinLockedProfitPct}
+              onChange={(event) => {
+                onChange(
+                  'trailingMinLockedProfitPct',
+                  Number(event.target.value)
+                );
+                onChange('trailingProfile', 'custom');
+              }}
+            />
+          </label>
+        </div>
+      </div>
+
       <div className="button-row">
         <button
           className="primary-button"
@@ -729,13 +914,6 @@ export function SettingsClient({
     setStatus('Push notifications disabled.');
   };
 
-  const logout = async () => {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-    });
-    window.location.href = '/login';
-  };
-
   return (
     <div className="stack-lg">
       <section className="card settings-shell">
@@ -746,13 +924,6 @@ export function SettingsClient({
               Manage symbol configurations and web push delivery for the runner.
             </p>
           </div>
-          <button
-            className="secondary-button settings-signout"
-            onClick={() => void logout()}
-            type="button"
-          >
-            Sign Out
-          </button>
         </div>
         <div
           aria-label="Settings sections"

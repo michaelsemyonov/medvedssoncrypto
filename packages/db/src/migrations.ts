@@ -265,4 +265,17 @@ export const MIGRATIONS: Array<{ id: string; sql: string }> = [
       ADD COLUMN broker VARCHAR(32) NOT NULL DEFAULT 'bybit' AFTER symbol_id;
     `,
   },
+  {
+    id: '006_trailing_profit_settings',
+    sql: `
+      ALTER TABLE symbols
+      ADD COLUMN trailing_profile VARCHAR(32) NOT NULL DEFAULT 'balanced' AFTER stop_loss_pct,
+      ADD COLUMN trailing_enabled BOOLEAN NOT NULL DEFAULT TRUE AFTER trailing_profile,
+      ADD COLUMN trailing_activation_profit_pct DOUBLE NOT NULL DEFAULT 1.2 AFTER trailing_enabled,
+      ADD COLUMN trailing_giveback_ratio DOUBLE NOT NULL DEFAULT 0.35 AFTER trailing_activation_profit_pct,
+      ADD COLUMN trailing_giveback_min_pct DOUBLE NOT NULL DEFAULT 0.4 AFTER trailing_giveback_ratio,
+      ADD COLUMN trailing_giveback_max_pct DOUBLE NOT NULL DEFAULT 1.5 AFTER trailing_giveback_min_pct,
+      ADD COLUMN trailing_min_locked_profit_pct DOUBLE NOT NULL DEFAULT 0.4 AFTER trailing_giveback_max_pct;
+    `,
+  },
 ];

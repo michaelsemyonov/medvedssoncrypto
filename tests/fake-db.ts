@@ -227,6 +227,25 @@ const normalizeSymbolSettings = (
     settings.maxOpenPositions ?? DEFAULT_SYMBOL_SETTINGS.maxOpenPositions,
   cooldownBars: settings.cooldownBars ?? DEFAULT_SYMBOL_SETTINGS.cooldownBars,
   stopLossPct: settings.stopLossPct ?? DEFAULT_SYMBOL_SETTINGS.stopLossPct,
+  trailingProfile:
+    settings.trailingProfile ?? DEFAULT_SYMBOL_SETTINGS.trailingProfile,
+  trailingEnabled:
+    settings.trailingEnabled ?? DEFAULT_SYMBOL_SETTINGS.trailingEnabled,
+  trailingActivationProfitPct:
+    settings.trailingActivationProfitPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingActivationProfitPct,
+  trailingGivebackRatio:
+    settings.trailingGivebackRatio ??
+    DEFAULT_SYMBOL_SETTINGS.trailingGivebackRatio,
+  trailingGivebackMinPct:
+    settings.trailingGivebackMinPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingGivebackMinPct,
+  trailingGivebackMaxPct:
+    settings.trailingGivebackMaxPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingGivebackMaxPct,
+  trailingMinLockedProfitPct:
+    settings.trailingMinLockedProfitPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingMinLockedProfitPct,
   maxDailyDrawdownPct:
     settings.maxDailyDrawdownPct ?? DEFAULT_SYMBOL_SETTINGS.maxDailyDrawdownPct,
   maxConsecutiveLosses:
@@ -942,8 +961,12 @@ export class FakeMedvedssonDatabase {
   async getRealizedPnlBetween(
     startTime: string,
     endTime: string,
-    runId: string | null = null
+    options: {
+      isCounterPosition?: boolean;
+      runId?: string | null;
+    } = {}
   ): Promise<number> {
+    const { isCounterPosition, runId = null } = options;
     const start = new Date(startTime).getTime();
     const end = new Date(endTime).getTime();
 
@@ -954,7 +977,9 @@ export class FakeMedvedssonDatabase {
           item.exit_time !== null &&
           item.exit_time.getTime() >= start &&
           item.exit_time.getTime() < end &&
-          (runId === null || item.strategy_run_id === runId)
+          (runId === null || item.strategy_run_id === runId) &&
+          (isCounterPosition === undefined ||
+            item.is_counter_position === isCounterPosition)
       )
       .reduce((sum, item) => sum + (item.realized_pnl ?? 0), 0);
   }

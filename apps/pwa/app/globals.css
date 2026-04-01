@@ -87,6 +87,13 @@ a {
   box-shadow: var(--shadow);
 }
 
+.hero-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
 .hero p,
 .muted,
 .status-line {
@@ -104,6 +111,11 @@ a {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 18px;
+}
+
+.hero-signout {
+  flex: 0 0 auto;
+  min-width: 120px;
 }
 
 .hero-link {
@@ -225,10 +237,6 @@ a {
 
 .settings-toolbar h2 {
   margin: 0;
-}
-
-.settings-signout {
-  flex: 0 0 auto;
 }
 
 .settings-tablist {
@@ -416,18 +424,20 @@ a {
 }
 
 .signal-chart-baseline {
-  stroke: rgba(159, 182, 211, 0.2);
-  stroke-dasharray: 4 4;
+  stroke: rgba(110, 231, 183, 0.72);
+  stroke-dasharray: 10 8;
+  stroke-linecap: round;
+  stroke-width: 3;
 }
 
 .signal-chart-gridline {
-  stroke: rgba(159, 182, 211, 0.1);
-  stroke-dasharray: 2 6;
+  stroke: rgba(159, 182, 211, 0.12);
+  stroke-dasharray: 4 10;
 }
 
 .signal-candle line,
 .signal-candle rect {
-  stroke-width: 1.5;
+  stroke-width: 4;
 }
 
 .signal-candle-up line,
@@ -443,19 +453,22 @@ a {
 }
 
 .signal-chart-label {
-  color: #ffffff;
+  fill: rgba(219, 234, 254, 0.88);
+  font-size: 18px;
   letter-spacing: 0.04em;
 }
 
 .signal-chart-axis-label {
   fill: var(--muted);
-  font-size: 0.72rem;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 18px;
   letter-spacing: 0.02em;
 }
 
 .signal-chart-reference-label {
-  fill: #dbeafe;
-  font-size: 0.72rem;
+  fill: #eff6ff;
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -575,8 +588,9 @@ a {
     align-items: stretch;
   }
 
-  .settings-signout {
-    width: 100%;
+  .hero-topbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .signals-pagination {
@@ -617,6 +631,10 @@ a {
   .hero-nav {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-signout {
+    width: 100%;
   }
 
   .hero-link {

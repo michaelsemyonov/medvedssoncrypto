@@ -175,6 +175,13 @@ export type SymbolRuntimeSettings = {
   maxDailyDrawdownPct: number;
   maxConsecutiveLosses: number;
   pollIntervalMs: number;
+  trailingProfile: 'conservative' | 'balanced' | 'aggressive' | 'custom';
+  trailingEnabled: boolean;
+  trailingActivationProfitPct: number;
+  trailingGivebackRatio: number;
+  trailingGivebackMinPct: number;
+  trailingGivebackMaxPct: number;
+  trailingMinLockedProfitPct: number;
 };
 
 export type AppConfig = {
@@ -200,6 +207,13 @@ export type AppConfig = {
   maxDailyDrawdownPct: number;
   maxConsecutiveLosses: number;
   pollIntervalMs: number;
+  trailingProfile: 'conservative' | 'balanced' | 'aggressive' | 'custom';
+  trailingEnabled: boolean;
+  trailingActivationProfitPct: number;
+  trailingGivebackRatio: number;
+  trailingGivebackMinPct: number;
+  trailingGivebackMaxPct: number;
+  trailingMinLockedProfitPct: number;
   defaultSymbols: string[];
   defaultSymbolSettings: SymbolRuntimeSettings;
   enableCandleStorage: boolean;

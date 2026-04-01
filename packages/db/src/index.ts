@@ -31,6 +31,11 @@ type Queryable = mysql.Pool | mysql.PoolConnection;
 type MysqlRow = mysql.RowDataPacket & Record<string, unknown>;
 type MysqlResult = mysql.ResultSetHeader;
 
+type RealizedPnlBetweenOptions = {
+  isCounterPosition?: boolean;
+  runId?: string | null;
+};
+
 type RunRow = {
   id: string;
   name: string;
@@ -73,6 +78,13 @@ type SymbolRow = {
   max_open_positions: number;
   cooldown_bars: number;
   stop_loss_pct: number;
+  trailing_profile: 'conservative' | 'balanced' | 'aggressive' | 'custom';
+  trailing_enabled: boolean;
+  trailing_activation_profit_pct: number;
+  trailing_giveback_ratio: number;
+  trailing_giveback_min_pct: number;
+  trailing_giveback_max_pct: number;
+  trailing_min_locked_profit_pct: number;
   max_daily_drawdown_pct: number;
   max_consecutive_losses: number;
   poll_interval_ms: number;
@@ -309,6 +321,15 @@ const normalizeSymbolRow = (row: MysqlRow): SymbolRow => ({
   max_open_positions: Number(row.max_open_positions),
   cooldown_bars: Number(row.cooldown_bars),
   stop_loss_pct: Number(row.stop_loss_pct),
+  trailing_profile: String(
+    row.trailing_profile
+  ) as SymbolRow['trailing_profile'],
+  trailing_enabled: parseBoolean(row.trailing_enabled),
+  trailing_activation_profit_pct: Number(row.trailing_activation_profit_pct),
+  trailing_giveback_ratio: Number(row.trailing_giveback_ratio),
+  trailing_giveback_min_pct: Number(row.trailing_giveback_min_pct),
+  trailing_giveback_max_pct: Number(row.trailing_giveback_max_pct),
+  trailing_min_locked_profit_pct: Number(row.trailing_min_locked_profit_pct),
   max_daily_drawdown_pct: Number(row.max_daily_drawdown_pct),
   max_consecutive_losses: Number(row.max_consecutive_losses),
   poll_interval_ms: Number(row.poll_interval_ms),
@@ -368,6 +389,25 @@ const normalizeSymbolSettings = (
     settings.maxOpenPositions ?? DEFAULT_SYMBOL_SETTINGS.maxOpenPositions,
   cooldownBars: settings.cooldownBars ?? DEFAULT_SYMBOL_SETTINGS.cooldownBars,
   stopLossPct: settings.stopLossPct ?? DEFAULT_SYMBOL_SETTINGS.stopLossPct,
+  trailingProfile:
+    settings.trailingProfile ?? DEFAULT_SYMBOL_SETTINGS.trailingProfile,
+  trailingEnabled:
+    settings.trailingEnabled ?? DEFAULT_SYMBOL_SETTINGS.trailingEnabled,
+  trailingActivationProfitPct:
+    settings.trailingActivationProfitPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingActivationProfitPct,
+  trailingGivebackRatio:
+    settings.trailingGivebackRatio ??
+    DEFAULT_SYMBOL_SETTINGS.trailingGivebackRatio,
+  trailingGivebackMinPct:
+    settings.trailingGivebackMinPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingGivebackMinPct,
+  trailingGivebackMaxPct:
+    settings.trailingGivebackMaxPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingGivebackMaxPct,
+  trailingMinLockedProfitPct:
+    settings.trailingMinLockedProfitPct ??
+    DEFAULT_SYMBOL_SETTINGS.trailingMinLockedProfitPct,
   maxDailyDrawdownPct:
     settings.maxDailyDrawdownPct ?? DEFAULT_SYMBOL_SETTINGS.maxDailyDrawdownPct,
   maxConsecutiveLosses:
@@ -405,6 +445,13 @@ const getSymbolRuntimeSettings = (row: SymbolRow): SymbolRuntimeSettings => ({
   maxOpenPositions: row.max_open_positions,
   cooldownBars: row.cooldown_bars,
   stopLossPct: row.stop_loss_pct,
+  trailingProfile: row.trailing_profile,
+  trailingEnabled: row.trailing_enabled,
+  trailingActivationProfitPct: row.trailing_activation_profit_pct,
+  trailingGivebackRatio: row.trailing_giveback_ratio,
+  trailingGivebackMinPct: row.trailing_giveback_min_pct,
+  trailingGivebackMaxPct: row.trailing_giveback_max_pct,
+  trailingMinLockedProfitPct: row.trailing_min_locked_profit_pct,
   maxDailyDrawdownPct: row.max_daily_drawdown_pct,
   maxConsecutiveLosses: row.max_consecutive_losses,
   pollIntervalMs: row.poll_interval_ms,
@@ -713,12 +760,19 @@ export class MedvedssonDatabase {
          max_open_positions,
          cooldown_bars,
          stop_loss_pct,
+         trailing_profile,
+         trailing_enabled,
+         trailing_activation_profit_pct,
+         trailing_giveback_ratio,
+         trailing_giveback_min_pct,
+         trailing_giveback_max_pct,
+         trailing_min_locked_profit_pct,
          max_daily_drawdown_pct,
          max_consecutive_losses,
          poll_interval_ms,
          active
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          exchange_timeout_ms = VALUES(exchange_timeout_ms),
          exchange_rate_limit_ms = VALUES(exchange_rate_limit_ms),
@@ -743,6 +797,13 @@ export class MedvedssonDatabase {
          max_open_positions = VALUES(max_open_positions),
          cooldown_bars = VALUES(cooldown_bars),
          stop_loss_pct = VALUES(stop_loss_pct),
+         trailing_profile = VALUES(trailing_profile),
+         trailing_enabled = VALUES(trailing_enabled),
+         trailing_activation_profit_pct = VALUES(trailing_activation_profit_pct),
+         trailing_giveback_ratio = VALUES(trailing_giveback_ratio),
+         trailing_giveback_min_pct = VALUES(trailing_giveback_min_pct),
+         trailing_giveback_max_pct = VALUES(trailing_giveback_max_pct),
+         trailing_min_locked_profit_pct = VALUES(trailing_min_locked_profit_pct),
          max_daily_drawdown_pct = VALUES(max_daily_drawdown_pct),
          max_consecutive_losses = VALUES(max_consecutive_losses),
          poll_interval_ms = VALUES(poll_interval_ms),
@@ -775,6 +836,13 @@ export class MedvedssonDatabase {
         settings.maxOpenPositions,
         settings.cooldownBars,
         settings.stopLossPct,
+        settings.trailingProfile,
+        settings.trailingEnabled,
+        settings.trailingActivationProfitPct,
+        settings.trailingGivebackRatio,
+        settings.trailingGivebackMinPct,
+        settings.trailingGivebackMaxPct,
+        settings.trailingMinLockedProfitPct,
         settings.maxDailyDrawdownPct,
         settings.maxConsecutiveLosses,
         settings.pollIntervalMs,
@@ -916,6 +984,13 @@ export class MedvedssonDatabase {
            max_open_positions = ?,
            cooldown_bars = ?,
            stop_loss_pct = ?,
+           trailing_profile = ?,
+           trailing_enabled = ?,
+           trailing_activation_profit_pct = ?,
+           trailing_giveback_ratio = ?,
+           trailing_giveback_min_pct = ?,
+           trailing_giveback_max_pct = ?,
+           trailing_min_locked_profit_pct = ?,
            max_daily_drawdown_pct = ?,
            max_consecutive_losses = ?,
            poll_interval_ms = ?,
@@ -948,6 +1023,13 @@ export class MedvedssonDatabase {
         settings.maxOpenPositions,
         settings.cooldownBars,
         settings.stopLossPct,
+        settings.trailingProfile,
+        settings.trailingEnabled,
+        settings.trailingActivationProfitPct,
+        settings.trailingGivebackRatio,
+        settings.trailingGivebackMinPct,
+        settings.trailingGivebackMaxPct,
+        settings.trailingMinLockedProfitPct,
         settings.maxDailyDrawdownPct,
         settings.maxConsecutiveLosses,
         settings.pollIntervalMs,
@@ -1371,20 +1453,30 @@ export class MedvedssonDatabase {
   async getRealizedPnlBetween(
     startTime: string,
     endTime: string,
-    runId: string | null = null
+    options: RealizedPnlBetweenOptions = {}
   ): Promise<number> {
-    const runFilter = runId === null ? '' : ' AND strategy_run_id = ?';
-    const params =
-      runId === null
-        ? [toMysqlDateTime(startTime), toMysqlDateTime(endTime)]
-        : [toMysqlDateTime(startTime), toMysqlDateTime(endTime), runId];
+    const { isCounterPosition, runId = null } = options;
+    const filters = [`status = 'CLOSED'`, 'exit_time >= ?', 'exit_time < ?'];
+    const params: Array<string | number | boolean> = [
+      toMysqlDateTime(startTime),
+      toMysqlDateTime(endTime),
+    ];
+
+    if (runId !== null) {
+      filters.push('strategy_run_id = ?');
+      params.push(runId);
+    }
+
+    if (isCounterPosition !== undefined) {
+      filters.push('is_counter_position = ?');
+      params.push(isCounterPosition);
+    }
+
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT COALESCE(SUM(realized_pnl), 0) AS total
        FROM positions
-       WHERE status = 'CLOSED'
-         AND exit_time >= ?
-         AND exit_time < ?${runFilter}`,
+       WHERE ${filters.join('\n         AND ')}`,
       params
     );
 

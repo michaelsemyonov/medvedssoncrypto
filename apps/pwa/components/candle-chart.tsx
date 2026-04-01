@@ -19,13 +19,13 @@ type CandleChartProps = {
   title: string;
 };
 
-const CHART_WIDTH = 320;
-const CHART_HEIGHT = 140;
+const CHART_WIDTH = 960;
+const CHART_HEIGHT = 420;
 const CHART_PADDING = {
-  top: 12,
-  right: 56,
-  bottom: 24,
-  left: 10,
+  top: 32,
+  right: 168,
+  bottom: 68,
+  left: 18,
 };
 const Y_AXIS_TICK_COUNT: number = 3;
 
@@ -76,7 +76,7 @@ export function CandleChart({
   const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
   const innerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
   const slotWidth = innerWidth / candles.length;
-  const bodyWidth = Math.max(4, slotWidth * 0.56);
+  const bodyWidth = Math.min(26, Math.max(8, slotWidth * 0.42));
 
   const yForPrice = (price: number): number =>
     CHART_PADDING.top + ((maxPrice - price) / priceRange) * innerHeight;
@@ -98,8 +98,8 @@ export function CandleChart({
   });
   const baselineY = yForPrice(baselinePrice);
   const baselineLabelY = Math.min(
-    Math.max(baselineY - 4, CHART_PADDING.top + 10),
-    CHART_PADDING.top + innerHeight - 2
+    Math.max(baselineY - 14, CHART_PADDING.top + 18),
+    CHART_PADDING.top + innerHeight - 10
   );
 
   return (

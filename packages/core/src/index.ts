@@ -202,6 +202,13 @@ export class TradingRunner {
       maxOpenPositions: symbol.max_open_positions,
       cooldownBars: symbol.cooldown_bars,
       stopLossPct: symbol.stop_loss_pct,
+      trailingProfile: symbol.trailing_profile,
+      trailingEnabled: symbol.trailing_enabled,
+      trailingActivationProfitPct: symbol.trailing_activation_profit_pct,
+      trailingGivebackRatio: symbol.trailing_giveback_ratio,
+      trailingGivebackMinPct: symbol.trailing_giveback_min_pct,
+      trailingGivebackMaxPct: symbol.trailing_giveback_max_pct,
+      trailingMinLockedProfitPct: symbol.trailing_min_locked_profit_pct,
       maxDailyDrawdownPct: symbol.max_daily_drawdown_pct,
       maxConsecutiveLosses: symbol.max_consecutive_losses,
       pollIntervalMs: symbol.poll_interval_ms,
@@ -496,7 +503,11 @@ export class TradingRunner {
     symbol: SymbolRecord,
     candle: Candle,
     openPosition: OpenPositionContext | null
-  ): { triggerPrice: number; stopLossPct: number; usesEntryPrice: boolean } | null {
+  ): {
+    triggerPrice: number;
+    stopLossPct: number;
+    usesEntryPrice: boolean;
+  } | null {
     if (!openPosition) {
       return null;
     }
@@ -528,7 +539,11 @@ export class TradingRunner {
       );
 
       return candle.low <= triggerPrice
-        ? { triggerPrice, stopLossPct: settings.stopLossPct, usesEntryPrice: false }
+        ? {
+            triggerPrice,
+            stopLossPct: settings.stopLossPct,
+            usesEntryPrice: false,
+          }
         : null;
     }
 
@@ -538,7 +553,11 @@ export class TradingRunner {
     );
 
     return candle.high >= triggerPrice
-      ? { triggerPrice, stopLossPct: settings.stopLossPct, usesEntryPrice: false }
+      ? {
+          triggerPrice,
+          stopLossPct: settings.stopLossPct,
+          usesEntryPrice: false,
+        }
       : null;
   }
 
