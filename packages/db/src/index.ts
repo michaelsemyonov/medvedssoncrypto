@@ -20,6 +20,7 @@ import type {
 import {
   DEFAULT_SYMBOL_SETTINGS,
   normalizeSymbol,
+  resolveMaxOpenPositions,
   round,
   SIGNAL_TYPES,
 } from '@medvedsson/shared';
@@ -885,6 +886,10 @@ export class MedvedssonDatabase {
       ...settings,
       exchange,
     });
+    const maxOpenPositions = resolveMaxOpenPositions(
+      normalizedSettings.maxOpenPositions,
+      symbols.length
+    );
 
     await execute(
       this.pool,
@@ -898,6 +903,7 @@ export class MedvedssonDatabase {
       results.push(
         await this.upsertSymbolRecord({
           ...normalizedSettings,
+          maxOpenPositions,
           symbol,
           active: true,
         })

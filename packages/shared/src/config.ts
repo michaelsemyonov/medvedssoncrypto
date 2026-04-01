@@ -69,6 +69,19 @@ export const DEFAULT_SYMBOL_SETTINGS: SymbolRuntimeSettings = {
   trailingMinLockedProfitPct: 0.4,
 };
 
+export const resolveMaxOpenPositions = (
+  configuredMaxOpenPositions: number,
+  symbolCount: number
+): number => {
+  if (symbolCount <= 0) {
+    return configuredMaxOpenPositions;
+  }
+
+  return configuredMaxOpenPositions === DEFAULT_SYMBOL_SETTINGS.maxOpenPositions
+    ? symbolCount
+    : configuredMaxOpenPositions;
+};
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])

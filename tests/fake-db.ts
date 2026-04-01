@@ -19,6 +19,7 @@ import type {
 import {
   DEFAULT_SYMBOL_SETTINGS,
   normalizeSymbol,
+  resolveMaxOpenPositions,
   round,
   SIGNAL_TYPES,
 } from '@medvedsson/shared';
@@ -537,11 +538,16 @@ export class FakeMedvedssonDatabase {
       ...settings,
       exchange,
     });
+    const maxOpenPositions = resolveMaxOpenPositions(
+      normalizedSettings.maxOpenPositions,
+      symbols.length
+    );
 
     for (const symbol of symbols) {
       results.push(
         this.upsertSymbolRecord({
           ...normalizedSettings,
+          maxOpenPositions,
           symbol,
           active: true,
         })

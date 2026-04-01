@@ -23,6 +23,7 @@ import {
   getEntrySignalTypeForPositionSide,
   getExitSignalTypeForPositionSide,
   getOppositePositionSide,
+  resolveMaxOpenPositions,
   round,
   SIGNAL_TYPES,
   timeframeToMs,
@@ -727,7 +728,10 @@ export class TradingRunner {
       symbolEnabled: symbol.active,
       enoughHistory: history.length >= requiredCandles(settings.signal),
       allowShort: settings.allowShort,
-      maxOpenPositions: settings.maxOpenPositions,
+      maxOpenPositions: resolveMaxOpenPositions(
+        settings.maxOpenPositions,
+        activeSymbols.length
+      ),
       openPositionsCount: await this.db.getOpenPositionsCount(runId),
       openPosition,
       cooldownRemainingBars,

@@ -10,6 +10,7 @@ import {
   loadConfig,
   normalizeSymbol,
   parseCookieHeader,
+  resolveMaxOpenPositions,
   SESSION_COOKIE_NAME,
   type ExchangeName,
   type Timeframe,
@@ -456,13 +457,14 @@ export const buildApp = async () => {
             equity: startingEquity,
             maxDrawdownPct: 0,
           };
-    const [todayRealizedPnl, todayCounterOrdersRealizedPnl] =
-      await Promise.all([
+    const [todayRealizedPnl, todayCounterOrdersRealizedPnl] = await Promise.all(
+      [
         db.getRealizedPnlBetween(today.start, today.end),
         db.getRealizedPnlBetween(today.start, today.end, {
           isCounterPosition: true,
         }),
-      ]);
+      ]
+    );
 
     return {
       activeSymbols: symbols.filter((symbol) => symbol.active),
@@ -568,50 +570,58 @@ export const buildApp = async () => {
     };
   });
 
-  app.get('/settings', async () => ({
-    vapidPublicKey: config.webPushVapidPublicKey,
-    symbols: await db.listSymbols(),
-    defaults: {
-      symbol: '',
-      active: true,
-      exchange: config.defaultSymbolSettings.exchange,
-      exchangeTimeoutMs: config.defaultSymbolSettings.exchangeTimeoutMs,
-      exchangeRateLimitMs: config.defaultSymbolSettings.exchangeRateLimitMs,
-      timeframe: config.defaultSymbolSettings.timeframe,
-      dryRun: config.defaultSymbolSettings.dryRun,
-      allowShort: config.defaultSymbolSettings.allowShort,
-      strategyKey: config.defaultSymbolSettings.strategyKey,
-      strategyVersion: config.defaultSymbolSettings.strategyVersion,
-      signalN: config.defaultSymbolSettings.signal.n,
-      signalK: config.defaultSymbolSettings.signal.k,
-      signalHBars: config.defaultSymbolSettings.signal.hBars,
-      fillModel: config.defaultSymbolSettings.execution.fillModel,
-      feeRate: config.defaultSymbolSettings.execution.feeRate,
-      slippageBps: config.defaultSymbolSettings.execution.slippageBps,
-      positionSizingMode:
-        config.defaultSymbolSettings.execution.positionSizingMode,
-      fixedUsdtPerTrade:
-        config.defaultSymbolSettings.execution.fixedUsdtPerTrade,
-      equityStartUsdt: config.defaultSymbolSettings.execution.equityStartUsdt,
-      maxOpenPositions: config.defaultSymbolSettings.maxOpenPositions,
-      cooldownBars: config.defaultSymbolSettings.cooldownBars,
-      stopLossPct: config.defaultSymbolSettings.stopLossPct,
-      trailingProfile: config.defaultSymbolSettings.trailingProfile,
-      trailingEnabled: config.defaultSymbolSettings.trailingEnabled,
-      trailingActivationProfitPct:
-        config.defaultSymbolSettings.trailingActivationProfitPct,
-      trailingGivebackRatio: config.defaultSymbolSettings.trailingGivebackRatio,
-      trailingGivebackMinPct:
-        config.defaultSymbolSettings.trailingGivebackMinPct,
-      trailingGivebackMaxPct:
-        config.defaultSymbolSettings.trailingGivebackMaxPct,
-      trailingMinLockedProfitPct:
-        config.defaultSymbolSettings.trailingMinLockedProfitPct,
-      maxDailyDrawdownPct: config.defaultSymbolSettings.maxDailyDrawdownPct,
-      maxConsecutiveLosses: config.defaultSymbolSettings.maxConsecutiveLosses,
-      pollIntervalMs: config.defaultSymbolSettings.pollIntervalMs,
-    },
-  }));
+  app.get('/settings', async () => {
+    const symbols = await db.listSymbols();
+
+    return {
+      vapidPublicKey: config.webPushVapidPublicKey,
+      symbols,
+      defaults: {
+        symbol: '',
+        active: true,
+        exchange: config.defaultSymbolSettings.exchange,
+        exchangeTimeoutMs: config.defaultSymbolSettings.exchangeTimeoutMs,
+        exchangeRateLimitMs: config.defaultSymbolSettings.exchangeRateLimitMs,
+        timeframe: config.defaultSymbolSettings.timeframe,
+        dryRun: config.defaultSymbolSettings.dryRun,
+        allowShort: config.defaultSymbolSettings.allowShort,
+        strategyKey: config.defaultSymbolSettings.strategyKey,
+        strategyVersion: config.defaultSymbolSettings.strategyVersion,
+        signalN: config.defaultSymbolSettings.signal.n,
+        signalK: config.defaultSymbolSettings.signal.k,
+        signalHBars: config.defaultSymbolSettings.signal.hBars,
+        fillModel: config.defaultSymbolSettings.execution.fillModel,
+        feeRate: config.defaultSymbolSettings.execution.feeRate,
+        slippageBps: config.defaultSymbolSettings.execution.slippageBps,
+        positionSizingMode:
+          config.defaultSymbolSettings.execution.positionSizingMode,
+        fixedUsdtPerTrade:
+          config.defaultSymbolSettings.execution.fixedUsdtPerTrade,
+        equityStartUsdt: config.defaultSymbolSettings.execution.equityStartUsdt,
+        maxOpenPositions: resolveMaxOpenPositions(
+          config.defaultSymbolSettings.maxOpenPositions,
+          symbols.length
+        ),
+        cooldownBars: config.defaultSymbolSettings.cooldownBars,
+        stopLossPct: config.defaultSymbolSettings.stopLossPct,
+        trailingProfile: config.defaultSymbolSettings.trailingProfile,
+        trailingEnabled: config.defaultSymbolSettings.trailingEnabled,
+        trailingActivationProfitPct:
+          config.defaultSymbolSettings.trailingActivationProfitPct,
+        trailingGivebackRatio:
+          config.defaultSymbolSettings.trailingGivebackRatio,
+        trailingGivebackMinPct:
+          config.defaultSymbolSettings.trailingGivebackMinPct,
+        trailingGivebackMaxPct:
+          config.defaultSymbolSettings.trailingGivebackMaxPct,
+        trailingMinLockedProfitPct:
+          config.defaultSymbolSettings.trailingMinLockedProfitPct,
+        maxDailyDrawdownPct: config.defaultSymbolSettings.maxDailyDrawdownPct,
+        maxConsecutiveLosses: config.defaultSymbolSettings.maxConsecutiveLosses,
+        pollIntervalMs: config.defaultSymbolSettings.pollIntervalMs,
+      },
+    };
+  });
 
   app.addHook('onClose', async () => {
     await runner.stop();

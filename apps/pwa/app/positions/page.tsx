@@ -62,43 +62,67 @@ const formatPct = (value: number): string => `${value.toFixed(2)}%`;
 
 const formatRatio = (value: number): string => value.toFixed(2);
 
+const formatRate = (value: number | null): string =>
+  value === null ? 'n/a' : value.toFixed(4);
+
+const getTrailingTakeProfitRate = (
+  position: PositionPageItem
+): number | null => {
+  if (
+    !position.trailing_enabled ||
+    !position.trailing_armed ||
+    position.trailing_peak_profit_pct === null ||
+    position.trailing_allowed_giveback_pct === null
+  ) {
+    return null;
+  }
+
+  const triggerProfitPct = Math.max(
+    position.trailing_min_locked_profit_pct,
+    position.trailing_peak_profit_pct - position.trailing_allowed_giveback_pct
+  );
+
+  const multiplier =
+    position.side === 'LONG'
+      ? 1 + triggerProfitPct / 100
+      : 1 - triggerProfitPct / 100;
+
+  return position.entry_price * multiplier;
+};
+
 function PositionOverviewTable({ position }: { position: PositionPageItem }) {
   return (
-    <div className="position-table-wrap">
-      <table className="position-info-table">
-        <tbody>
-          <tr>
-            <th scope="row">Entry Time</th>
-            <td>{formatDateTime(position.entry_time)}</td>
-          </tr>
-          <tr>
-            <th scope="row">Entry Price</th>
-            <td>{position.entry_price.toFixed(4)}</td>
-          </tr>
-          <tr>
-            <th scope="row">Qty</th>
-            <td>{position.qty.toFixed(6)}</td>
-          </tr>
-          <tr>
-            <th scope="row">Amount</th>
-            <td>{formatUsdtValue(position.notional_usdt)}</td>
-          </tr>
-          <tr>
-            <th scope="row">Unrealized PnL</th>
-            <td>{formatSignedValue(position.unrealized_pnl)}</td>
-          </tr>
-          <tr>
-            <th scope="row">Position Type</th>
-            <td>{position.is_counter_position ? 'Counter' : 'Primary'}</td>
-          </tr>
-          <tr>
-            <th scope="row">Exchange</th>
-            <td>
-              <ExchangeBadge exchange={position.broker} />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div className="signal-grid">
+      <div className="signal-field">
+        <span className="signal-field-label">Entry Time</span>
+        <strong>{formatDateTime(position.entry_time)}</strong>
+      </div>
+      <div className="signal-field">
+        <span className="signal-field-label">Entry Price</span>
+        <strong>{position.entry_price.toFixed(4)}</strong>
+      </div>
+      <div className="signal-field">
+        <span className="signal-field-label">Qty</span>
+        <strong>{position.qty.toFixed(6)}</strong>
+      </div>
+      <div className="signal-field">
+        <span className="signal-field-label">Amount</span>
+        <strong>{formatUsdtValue(position.notional_usdt)}</strong>
+      </div>
+      <div className="signal-field">
+        <span className="signal-field-label">Unrealized PnL</span>
+        <strong>{formatSignedValue(position.unrealized_pnl)}</strong>
+      </div>
+      <div className="signal-field">
+        <span className="signal-field-label">Position Type</span>
+        <strong>{position.is_counter_position ? 'Counter' : 'Primary'}</strong>
+      </div>
+      <div className="signal-field">
+        <span className="signal-field-label">Exchange</span>
+        <strong className="position-field-badge">
+          <ExchangeBadge exchange={position.broker} />
+        </strong>
+      </div>
     </div>
   );
 }
@@ -154,31 +178,47 @@ const formatSignedPct = (value: number | null): string => {
 
 function TrailingDetails({ position }: { position: PositionPageItem }) {
   const armed = position.trailing_armed;
+  const statusLabel = !position.trailing_enabled
+    ? 'Disabled'
+    : armed
+      ? 'Armed'
+      : 'Not Armed';
+  const trailingTakeProfitRate = getTrailingTakeProfitRate(position);
 
   return (
-    <section className="position-subcard">
-      <div className="position-subhead">
-        <h4>Trailing Profit</h4>
-        {!position.trailing_enabled ? (
-          <span className="pill pill-warn">Disabled</span>
-        ) : armed ? (
-          <span className="pill">Armed</span>
-        ) : (
-          <span className="pill pill-warn">Not Armed</span>
-        )}
-      </div>
+    <details className="position-subcard">
+      <summary className="position-subsummary">
+        <span className="position-subhead">
+          <h4>Trailing Profit</h4>
+          {!position.trailing_enabled ? (
+            <span className="pill pill-warn">Disabled</span>
+          ) : armed ? (
+            <span className="pill">Armed</span>
+          ) : (
+            <span className="pill pill-warn">Not Armed</span>
+          )}
+        </span>
+        <span className="position-subsummary-values">
+          <span className="trade-summary-value">
+            <span className="trade-summary-label">Profile</span>
+            <strong>{formatProfileLabel(position.trailing_profile)}</strong>
+          </span>
+          <span className="trade-summary-value">
+            <span className="trade-summary-label">Peak Profit</span>
+            <strong>{formatSignedPct(position.trailing_peak_profit_pct)}</strong>
+          </span>
+          <span className="trade-summary-value">
+            <span className="trade-summary-label">Status</span>
+            <strong>{statusLabel}</strong>
+          </span>
+        </span>
+      </summary>
       <div className="position-table-wrap">
         <table className="position-info-table position-info-table-compact">
           <tbody>
             <tr>
               <th scope="row">Status</th>
-              <td>
-                {!position.trailing_enabled
-                  ? 'Disabled'
-                  : armed
-                    ? 'Armed'
-                    : 'Not Armed'}
-              </td>
+              <td>{statusLabel}</td>
             </tr>
             <tr>
               <th scope="row">Profile</th>
@@ -209,6 +249,10 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
               </td>
             </tr>
             <tr>
+              <th scope="row">Take-Profit Rate Now</th>
+              <td>{formatRate(trailingTakeProfitRate)}</td>
+            </tr>
+            <tr>
               <th scope="row">Activation Threshold</th>
               <td>{formatPct(position.trailing_activation_profit_pct)}</td>
             </tr>
@@ -231,7 +275,7 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
           </tbody>
         </table>
       </div>
-    </section>
+    </details>
   );
 }
 

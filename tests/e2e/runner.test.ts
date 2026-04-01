@@ -151,6 +151,56 @@ describe('runner e2e flow', () => {
     await db.close();
   });
 
+  it('uses the active symbol count when legacy rows still store max open positions as 5', async () => {
+    const db = createFakeDatabase();
+    await db.migrate();
+
+    const config = buildTestConfig();
+    const symbols = [
+      'BTC/USDT',
+      'ETH/USDT',
+      'SOL/USDT',
+      'XRP/USDT',
+      'ADA/USDT',
+      'DOGE/USDT',
+    ];
+    const closes = [...Array.from({ length: 97 }, () => 100), 105, 106];
+
+    for (const symbol of symbols) {
+      await db.createSymbol({
+        ...config.defaultSymbolSettings,
+        symbol,
+        active: true,
+        maxOpenPositions: 5,
+      });
+    }
+
+    const runner = new TradingRunner({
+      config,
+      db: db as never,
+      marketData: {
+        fetchRecentCandles: async (symbol: string) =>
+          generateCandles(closes, symbol),
+      } as never,
+      notifications: {
+        notifySignal: async () => undefined,
+        notifyRunnerError: async () => undefined,
+      } as never,
+      logger: silentLogger,
+    });
+
+    await runner.init();
+    await runner.start();
+
+    const run = await db.getActiveRun();
+    const positions = run ? await db.getOpenPositions(run.id) : [];
+
+    expect(positions).toHaveLength(symbols.length);
+
+    await runner.stop();
+    await db.close();
+  });
+
   it('only fills a counter position on stop loss without opening a new reverse trade', async () => {
     const db = createFakeDatabase();
     await db.migrate();

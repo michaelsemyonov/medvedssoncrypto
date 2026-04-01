@@ -1,6 +1,11 @@
 import { createDatabase } from '@medvedsson/db';
 import { DryRunExecutionAdapter, evaluateRisk } from '@medvedsson/execution';
-import { loadConfig, SIGNAL_TYPES, timeframeToMs } from '@medvedsson/shared';
+import {
+  loadConfig,
+  resolveMaxOpenPositions,
+  SIGNAL_TYPES,
+  timeframeToMs,
+} from '@medvedsson/shared';
 import {
   evaluateMomentumStrategy,
   requiredCandles,
@@ -163,7 +168,10 @@ const main = async () => {
             timeframe: symbol.timeframe,
           }),
         allowShort: symbol.allow_short,
-        maxOpenPositions: symbol.max_open_positions,
+        maxOpenPositions: resolveMaxOpenPositions(
+          symbol.max_open_positions,
+          symbolRows.length
+        ),
         openPositionsCount: await db.getOpenPositionsCount(run.id),
         openPosition,
         cooldownRemainingBars,

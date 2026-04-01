@@ -144,6 +144,29 @@ describe('database integration', () => {
     await db.close();
   });
 
+  it('defaults max open positions to the active symbol count', async () => {
+    const db = createFakeDatabase();
+    const config = buildTestConfig();
+
+    await db.migrate();
+
+    const symbols = await db.replaceActiveSymbols(config.exchange, [
+      'BTC/USDT',
+      'ETH/USDT',
+      'SOL/USDT',
+      'XRP/USDT',
+      'ADA/USDT',
+      'DOGE/USDT',
+    ]);
+
+    expect(symbols).toHaveLength(6);
+    expect(symbols.every((symbol) => symbol.max_open_positions === 6)).toBe(
+      true
+    );
+
+    await db.close();
+  });
+
   it('returns the latest 60 minutes of candles for each signal including the trigger candle', async () => {
     const db = createFakeDatabase();
     const config = buildTestConfig();
