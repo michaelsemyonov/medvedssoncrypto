@@ -7,21 +7,24 @@ import './globals.css';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
-  variable: '--font-space-grotesk'
+  variable: '--font-space-grotesk',
 });
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500'],
-  variable: '--font-ibm-plex-mono'
+  variable: '--font-ibm-plex-mono',
 });
 
 export const metadata: Metadata = {
   title: 'MedvedssonCrypto',
-  description: 'Dry-run crypto signal monitoring, trade simulation, and PWA notifications.'
+  description:
+    'Dry-run crypto signal monitoring, trade simulation, and PWA notifications.',
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} ${ibmPlexMono.variable}`}>
@@ -29,11 +32,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <main className="shell">
           <section className="hero">
             <div className="eyebrow">MedvedssonCrypto</div>
-            <h1>Dry-run 5m momentum signals with push-ready monitoring.</h1>
-            <p>
-              The PWA focuses on signal visibility, current positions, dry-run trades, and backend
-              health. Execution remains simulated only.
-            </p>
             <nav className="hero-nav">
               <Link className="hero-link" href="/">
                 Dashboard
