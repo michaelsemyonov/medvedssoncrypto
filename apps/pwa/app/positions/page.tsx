@@ -16,6 +16,7 @@ type PositionPageItem = {
   entry_price: number;
   entry_time: string;
   id: string;
+  notional_usdt: number;
   qty: number;
   recent_candles: PositionPageCandle[];
   side: 'LONG' | 'SHORT';
@@ -25,6 +26,8 @@ type PositionPageItem = {
 
 const formatSignedValue = (value: number | null): string =>
   value === null ? 'n/a' : `${value >= 0 ? '+' : ''}${value.toFixed(4)}`;
+
+const formatUsdtValue = (value: number): string => `${value.toFixed(2)} USDT`;
 
 const getSideClassName = (side: PositionPageItem['side']): string =>
   side === 'LONG' ? 'pill' : 'pill pill-warn';
@@ -73,6 +76,10 @@ export default async function PositionsPage() {
                   <div className="signal-field">
                     <span className="signal-field-label">Qty</span>
                     <strong>{position.qty.toFixed(6)}</strong>
+                  </div>
+                  <div className="signal-field">
+                    <span className="signal-field-label">Amount</span>
+                    <strong>{formatUsdtValue(position.notional_usdt)}</strong>
                   </div>
                   <div className="signal-field">
                     <span className="signal-field-label">Unrealized PnL</span>
