@@ -102,6 +102,7 @@ type PositionRow = {
 type RecentTradeRow = PositionRow & {
   symbol: string;
   opened_at: Date;
+  opening_order_created_at: Date;
 };
 
 type SimulatedOrderRow = {
@@ -1361,10 +1362,17 @@ export class MedvedssonDatabase {
   async getRecentTrades(limit = 100, offset = 0): Promise<RecentTradeRow[]> {
     const rows = await query<MysqlRow>(
       this.pool,
-      `SELECT p.*, s.symbol, os.candle_close_time AS opening_signal_time
+      `SELECT
+         p.*,
+         s.symbol,
+         os.candle_close_time AS opening_signal_time,
+         oo.created_at AS opening_order_created_at
        FROM positions p
        INNER JOIN symbols s ON s.id = p.symbol_id
        INNER JOIN signals os ON os.id = p.opened_by_signal_id
+       INNER JOIN simulated_orders oo
+         ON oo.signal_id = p.opened_by_signal_id
+        AND oo.intent = 'OPEN_POSITION'
        WHERE p.status = 'CLOSED'
        ORDER BY GREATEST(p.entry_time, os.candle_close_time) DESC,
                 p.updated_at DESC,
@@ -1381,6 +1389,7 @@ export class MedvedssonDatabase {
         ...position,
         symbol: String(row.symbol),
         opened_at: resolveTradeOpenedAt(position, openingSignalTime),
+        opening_order_created_at: parseDate(row.opening_order_created_at)!,
       };
     });
   }

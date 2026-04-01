@@ -88,6 +88,7 @@ type PositionRow = {
 type RecentTradeRow = PositionRow & {
   symbol: string;
   opened_at: Date;
+  opening_order_created_at: Date;
 };
 
 type SimulatedOrderRow = {
@@ -875,6 +876,12 @@ export class FakeMedvedssonDatabase {
             this.symbols.find((item) => item.id === position.symbol_id)
               ?.symbol ?? 'UNKNOWN',
           opened_at: resolveTradeOpenedAt(position, openingSignalTime),
+          opening_order_created_at:
+            this.simulatedOrders.find(
+              (item) =>
+                item.signal_id === position.opened_by_signal_id &&
+                item.intent === 'OPEN_POSITION'
+            )?.created_at ?? position.created_at,
         };
       })
       .sort(compareClosedPositionsDesc)

@@ -417,6 +417,9 @@ describe('database integration', () => {
 
     expect(trade?.entry_time.toISOString()).toBe('2026-01-01T00:05:00.000Z');
     expect(trade?.opened_at.toISOString()).toBe('2026-01-01T00:10:00.000Z');
+    expect(trade?.opening_order_created_at.toISOString()).toBe(
+      openOrder!.created_at.toISOString()
+    );
 
     await db.close();
   });
