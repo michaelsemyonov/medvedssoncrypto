@@ -6,6 +6,7 @@ import {
 } from '@medvedsson/execution';
 import type {
   AppConfig,
+  BrokerName,
   Candle,
   ExchangeName,
   OpenPositionContext,
@@ -42,6 +43,8 @@ type SymbolRow = {
   exchange: ExchangeName;
   exchange_timeout_ms: number;
   exchange_rate_limit_ms: number;
+  position_broker: BrokerName;
+  counter_position_broker: BrokerName;
   symbol: string;
   base_asset: string;
   quote_asset: string;
@@ -61,6 +64,7 @@ type SymbolRow = {
   equity_start_usdt: number;
   max_open_positions: number;
   cooldown_bars: number;
+  stop_loss_pct: number;
   max_daily_drawdown_pct: number;
   max_consecutive_losses: number;
   poll_interval_ms: number;
@@ -102,6 +106,8 @@ type PositionRow = {
   id: string;
   strategy_run_id: string;
   symbol_id: string;
+  broker: BrokerName;
+  is_counter_position: boolean;
   side: 'LONG' | 'SHORT';
   status: 'OPEN' | 'CLOSED';
   entry_time: Date;
@@ -132,6 +138,7 @@ type SimulatedOrderRow = {
   position_id: string | null;
   signal_id: string;
   symbol_id: string;
+  broker: BrokerName;
   order_type: string;
   side: 'BUY' | 'SELL';
   intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
@@ -177,6 +184,11 @@ const normalizeSymbolSettings = (
     settings.exchangeTimeoutMs ?? DEFAULT_SYMBOL_SETTINGS.exchangeTimeoutMs,
   exchangeRateLimitMs:
     settings.exchangeRateLimitMs ?? DEFAULT_SYMBOL_SETTINGS.exchangeRateLimitMs,
+  positionBroker:
+    settings.positionBroker ?? DEFAULT_SYMBOL_SETTINGS.positionBroker,
+  counterPositionBroker:
+    settings.counterPositionBroker ??
+    DEFAULT_SYMBOL_SETTINGS.counterPositionBroker,
   timeframe: settings.timeframe ?? DEFAULT_SYMBOL_SETTINGS.timeframe,
   dryRun: settings.dryRun ?? DEFAULT_SYMBOL_SETTINGS.dryRun,
   allowShort: settings.allowShort ?? DEFAULT_SYMBOL_SETTINGS.allowShort,
@@ -214,6 +226,7 @@ const normalizeSymbolSettings = (
   maxOpenPositions:
     settings.maxOpenPositions ?? DEFAULT_SYMBOL_SETTINGS.maxOpenPositions,
   cooldownBars: settings.cooldownBars ?? DEFAULT_SYMBOL_SETTINGS.cooldownBars,
+  stopLossPct: settings.stopLossPct ?? DEFAULT_SYMBOL_SETTINGS.stopLossPct,
   maxDailyDrawdownPct:
     settings.maxDailyDrawdownPct ?? DEFAULT_SYMBOL_SETTINGS.maxDailyDrawdownPct,
   maxConsecutiveLosses:
@@ -341,6 +354,8 @@ export class FakeMedvedssonDatabase {
             exchange: activeSymbols[0].exchange,
             exchangeTimeoutMs: activeSymbols[0].exchange_timeout_ms,
             exchangeRateLimitMs: activeSymbols[0].exchange_rate_limit_ms,
+            positionBroker: activeSymbols[0].position_broker,
+            counterPositionBroker: activeSymbols[0].counter_position_broker,
             timeframe: activeSymbols[0].timeframe,
             dryRun: activeSymbols[0].dry_run,
             allowShort: activeSymbols[0].allow_short,
@@ -362,6 +377,7 @@ export class FakeMedvedssonDatabase {
             },
             maxOpenPositions: activeSymbols[0].max_open_positions,
             cooldownBars: activeSymbols[0].cooldown_bars,
+            stopLossPct: activeSymbols[0].stop_loss_pct,
             maxDailyDrawdownPct: activeSymbols[0].max_daily_drawdown_pct,
             maxConsecutiveLosses: activeSymbols[0].max_consecutive_losses,
             pollIntervalMs: activeSymbols[0].poll_interval_ms,
@@ -407,6 +423,8 @@ export class FakeMedvedssonDatabase {
         exchange: settings.exchange,
         exchange_timeout_ms: settings.exchangeTimeoutMs,
         exchange_rate_limit_ms: settings.exchangeRateLimitMs,
+        position_broker: settings.positionBroker,
+        counter_position_broker: settings.counterPositionBroker,
         symbol: normalizedSymbol,
         base_asset: baseAsset!,
         quote_asset: quoteAsset!,
@@ -426,6 +444,7 @@ export class FakeMedvedssonDatabase {
         equity_start_usdt: settings.execution.equityStartUsdt,
         max_open_positions: settings.maxOpenPositions,
         cooldown_bars: settings.cooldownBars,
+        stop_loss_pct: settings.stopLossPct,
         max_daily_drawdown_pct: settings.maxDailyDrawdownPct,
         max_consecutive_losses: settings.maxConsecutiveLosses,
         poll_interval_ms: settings.pollIntervalMs,
@@ -440,6 +459,8 @@ export class FakeMedvedssonDatabase {
     row.exchange = settings.exchange;
     row.exchange_timeout_ms = settings.exchangeTimeoutMs;
     row.exchange_rate_limit_ms = settings.exchangeRateLimitMs;
+    row.position_broker = settings.positionBroker;
+    row.counter_position_broker = settings.counterPositionBroker;
     row.symbol = normalizedSymbol;
     row.base_asset = baseAsset!;
     row.quote_asset = quoteAsset!;
@@ -459,6 +480,7 @@ export class FakeMedvedssonDatabase {
     row.equity_start_usdt = settings.execution.equityStartUsdt;
     row.max_open_positions = settings.maxOpenPositions;
     row.cooldown_bars = settings.cooldownBars;
+    row.stop_loss_pct = settings.stopLossPct;
     row.max_daily_drawdown_pct = settings.maxDailyDrawdownPct;
     row.max_consecutive_losses = settings.maxConsecutiveLosses;
     row.poll_interval_ms = settings.pollIntervalMs;
@@ -559,6 +581,8 @@ export class FakeMedvedssonDatabase {
     existing.exchange = settings.exchange;
     existing.exchange_timeout_ms = settings.exchangeTimeoutMs;
     existing.exchange_rate_limit_ms = settings.exchangeRateLimitMs;
+    existing.position_broker = settings.positionBroker;
+    existing.counter_position_broker = settings.counterPositionBroker;
     existing.symbol = normalizedSymbol;
     existing.base_asset = baseAsset!;
     existing.quote_asset = quoteAsset!;
@@ -578,6 +602,7 @@ export class FakeMedvedssonDatabase {
     existing.equity_start_usdt = settings.execution.equityStartUsdt;
     existing.max_open_positions = settings.maxOpenPositions;
     existing.cooldown_bars = settings.cooldownBars;
+    existing.stop_loss_pct = settings.stopLossPct;
     existing.max_daily_drawdown_pct = settings.maxDailyDrawdownPct;
     existing.max_consecutive_losses = settings.maxConsecutiveLosses;
     existing.poll_interval_ms = settings.pollIntervalMs;
@@ -813,6 +838,8 @@ export class FakeMedvedssonDatabase {
       qty: row.qty,
       notionalUsdt: row.notional_usdt,
       entryFee: row.entry_fee,
+      broker: row.broker,
+      isCounterPosition: row.is_counter_position,
     };
   }
 
@@ -936,6 +963,7 @@ export class FakeMedvedssonDatabase {
     runId: string;
     signalId: string;
     symbolId: string;
+    broker: BrokerName;
     orderType: string;
     side: 'BUY' | 'SELL';
     intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
@@ -964,6 +992,7 @@ export class FakeMedvedssonDatabase {
       position_id: params.positionId ?? null,
       signal_id: params.signalId,
       symbol_id: params.symbolId,
+      broker: params.broker,
       order_type: params.orderType,
       side: params.side,
       intent: params.intent,
@@ -1020,6 +1049,8 @@ export class FakeMedvedssonDatabase {
         id: randomUUID(),
         strategy_run_id: order.strategy_run_id,
         symbol_id: order.symbol_id,
+        broker: order.broker,
+        is_counter_position: Boolean(order.meta.is_counter_position),
         side: order.side === 'BUY' ? 'LONG' : 'SHORT',
         status: 'OPEN',
         entry_time: new Date(fillTime),

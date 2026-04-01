@@ -8,9 +8,11 @@ export default async function SettingsPage() {
     vapidPublicKey: string;
     symbols: Array<{
       id: string;
-      exchange: 'bybit' | 'binance';
+      exchange: 'bybit' | 'binance' | 'okx';
       exchange_timeout_ms: number;
       exchange_rate_limit_ms: number;
+      position_broker: 'bybit' | 'okx';
+      counter_position_broker: 'bybit' | 'okx';
       symbol: string;
       base_asset: string;
       quote_asset: string;
@@ -30,6 +32,7 @@ export default async function SettingsPage() {
       equity_start_usdt: number;
       max_open_positions: number;
       cooldown_bars: number;
+      stop_loss_pct: number;
       max_daily_drawdown_pct: number;
       max_consecutive_losses: number;
       poll_interval_ms: number;
@@ -38,9 +41,11 @@ export default async function SettingsPage() {
     defaults: {
       symbol: string;
       active: boolean;
-      exchange: 'bybit' | 'binance';
+      exchange: 'bybit' | 'binance' | 'okx';
       exchangeTimeoutMs: number;
       exchangeRateLimitMs: number;
+      positionBroker: 'bybit' | 'okx';
+      counterPositionBroker: 'bybit' | 'okx';
       timeframe: '5m' | '15m';
       dryRun: boolean;
       allowShort: boolean;
@@ -57,6 +62,7 @@ export default async function SettingsPage() {
       equityStartUsdt: number;
       maxOpenPositions: number;
       cooldownBars: number;
+      stopLossPct: number;
       maxDailyDrawdownPct: number;
       maxConsecutiveLosses: number;
       pollIntervalMs: number;
@@ -70,6 +76,8 @@ export default async function SettingsPage() {
       exchange: 'bybit',
       exchangeTimeoutMs: 10000,
       exchangeRateLimitMs: 300,
+      positionBroker: 'bybit',
+      counterPositionBroker: 'okx',
       timeframe: '5m',
       dryRun: true,
       allowShort: true,
@@ -86,6 +94,7 @@ export default async function SettingsPage() {
       equityStartUsdt: 10000,
       maxOpenPositions: 5,
       cooldownBars: 3,
+      stopLossPct: 2,
       maxDailyDrawdownPct: 5,
       maxConsecutiveLosses: 5,
       pollIntervalMs: 15000,

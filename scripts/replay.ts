@@ -182,10 +182,18 @@ const main = async () => {
       });
 
       if (decision.approved) {
+        const broker =
+          openPosition?.broker ??
+          (signal.signalType === 'LONG_ENTRY' ||
+          signal.signalType === 'SHORT_ENTRY'
+            ? symbol.position_broker
+            : symbol.counter_position_broker);
+
         await executionAdapter.handleApprovedSignal({
           runId: run.id,
           signalId: signalRow.id,
           symbolId: symbol.id,
+          broker,
           signalType: signal.signalType,
           referencePrice: candle.close,
           scheduledForOpenTime: candle.closeTime,

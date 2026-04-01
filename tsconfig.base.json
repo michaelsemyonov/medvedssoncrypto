@@ -19,11 +19,12 @@
       "@/*": ["apps/pwa/*"],
       "@medvedsson/shared": ["packages/shared/src/index.ts"],
       "@medvedsson/strategy": ["packages/strategy/src/index.ts"],
+      "@medvedsson/exit-manager": ["packages/exit-manager/src/index.ts"],
       "@medvedsson/execution": ["packages/execution/src/index.ts"],
       "@medvedsson/db": ["packages/db/src/index.ts"],
       "@medvedsson/core": ["packages/core/src/index.ts"],
       "@medvedsson/market-data": ["packages/market-data/src/index.ts"],
-      "@medvedsson/notifications": ["packages/notifications/src/index.ts"]
-    }
-  }
+      "@medvedsson/notifications": ["packages/notifications/src/index.ts"],
+    },
+  },
 }

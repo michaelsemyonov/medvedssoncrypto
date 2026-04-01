@@ -28,6 +28,7 @@
   "dependencies": {
     "@medvedsson/db": "workspace:*",
     "@medvedsson/execution": "workspace:*",
+    "@medvedsson/exit-manager": "workspace:*",
     "@medvedsson/shared": "workspace:*",
     "@medvedsson/strategy": "workspace:*"
   },

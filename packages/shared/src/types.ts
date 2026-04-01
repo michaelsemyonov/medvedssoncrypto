@@ -48,9 +48,17 @@ export type OrderSide = (typeof ORDER_SIDES)[keyof typeof ORDER_SIDES];
 export const EXCHANGES = {
   BYBIT: 'bybit',
   BINANCE: 'binance',
+  OKX: 'okx',
 } as const;
 
 export type ExchangeName = (typeof EXCHANGES)[keyof typeof EXCHANGES];
+
+export const BROKERS = {
+  BYBIT: 'bybit',
+  OKX: 'okx',
+} as const;
+
+export type BrokerName = (typeof BROKERS)[keyof typeof BROKERS];
 
 export type Timeframe = '5m' | '15m';
 
@@ -103,6 +111,8 @@ export type OpenPositionContext = {
   qty: number;
   notionalUsdt: number;
   entryFee: number;
+  broker: BrokerName;
+  isCounterPosition: boolean;
 };
 
 export type RiskDecision = {
@@ -150,6 +160,8 @@ export type SymbolRuntimeSettings = {
   exchange: ExchangeName;
   exchangeTimeoutMs: number;
   exchangeRateLimitMs: number;
+  positionBroker: BrokerName;
+  counterPositionBroker: BrokerName;
   timeframe: Timeframe;
   dryRun: boolean;
   allowShort: boolean;
@@ -159,6 +171,7 @@ export type SymbolRuntimeSettings = {
   execution: ExecutionConfig;
   maxOpenPositions: number;
   cooldownBars: number;
+  stopLossPct: number;
   maxDailyDrawdownPct: number;
   maxConsecutiveLosses: number;
   pollIntervalMs: number;
@@ -171,6 +184,8 @@ export type AppConfig = {
   exchange: ExchangeName;
   exchangeTimeoutMs: number;
   exchangeRateLimitMs: number;
+  positionBroker: BrokerName;
+  counterPositionBroker: BrokerName;
   timeframe: Timeframe;
   symbols: string[];
   dryRun: boolean;
@@ -181,6 +196,7 @@ export type AppConfig = {
   execution: ExecutionConfig;
   maxOpenPositions: number;
   cooldownBars: number;
+  stopLossPct: number;
   maxDailyDrawdownPct: number;
   maxConsecutiveLosses: number;
   pollIntervalMs: number;

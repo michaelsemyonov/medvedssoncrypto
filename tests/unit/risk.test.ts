@@ -1,4 +1,8 @@
-import { POSITION_SIDES, SIGNAL_TYPES, type StrategySignal } from '@medvedsson/shared';
+import {
+  POSITION_SIDES,
+  SIGNAL_TYPES,
+  type StrategySignal,
+} from '@medvedsson/shared';
 import { evaluateRisk } from '@medvedsson/execution';
 
 const baseSignal: StrategySignal = {
@@ -12,14 +16,14 @@ const baseSignal: StrategySignal = {
     k: 5,
     H: 72,
     threshold: 0.025,
-    comparison: 'LONG'
+    comparison: 'LONG',
   },
   indicators: {
     return: 0.05,
-    baselineMoveMagnitude: 0.005
+    baselineMoveMagnitude: 0.005,
   },
   features: {},
-  reason: 'LONG threshold breached.'
+  reason: 'LONG threshold breached.',
 };
 
 describe('risk engine', () => {
@@ -36,7 +40,7 @@ describe('risk engine', () => {
       currentDrawdownPct: 0,
       maxDailyDrawdownPct: 5,
       consecutiveLosses: 0,
-      maxConsecutiveLosses: 5
+      maxConsecutiveLosses: 5,
     });
 
     const duplicateDecision = evaluateRisk({
@@ -53,13 +57,15 @@ describe('risk engine', () => {
         entryPrice: 100,
         qty: 1,
         notionalUsdt: 100,
-        entryFee: 0.1
+        entryFee: 0.1,
+        broker: 'bybit',
+        isCounterPosition: false,
       },
       cooldownRemainingBars: 0,
       currentDrawdownPct: 0,
       maxDailyDrawdownPct: 5,
       consecutiveLosses: 0,
-      maxConsecutiveLosses: 5
+      maxConsecutiveLosses: 5,
     });
 
     expect(shortDecision.approved).toBe(false);
@@ -80,7 +86,7 @@ describe('risk engine', () => {
       currentDrawdownPct: 0,
       maxDailyDrawdownPct: 5,
       consecutiveLosses: 0,
-      maxConsecutiveLosses: 5
+      maxConsecutiveLosses: 5,
     });
 
     expect(decision.approved).toBe(true);

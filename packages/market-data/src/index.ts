@@ -1,7 +1,12 @@
 import type { Candle, Timeframe } from '@medvedsson/shared';
-import { normalizeSymbol, sleep, symbolToExchangeMarket, timeframeToMs } from '@medvedsson/shared';
+import {
+  normalizeSymbol,
+  sleep,
+  symbolToExchangeMarket,
+  timeframeToMs,
+} from '@medvedsson/shared';
 
-type ExchangeName = 'bybit' | 'binance';
+type ExchangeName = 'bybit' | 'binance' | 'okx';
 
 type AdapterConfig = {
   exchange: ExchangeName;
@@ -20,7 +25,7 @@ const defaultLogger: LoggerLike = {
   debug: () => undefined,
   info: () => undefined,
   warn: () => undefined,
-  error: () => undefined
+  error: () => undefined,
 };
 
 export type CandleSeriesDiagnostics = {
@@ -41,7 +46,9 @@ export const mergeCandles = (...series: Candle[][]): Candle[] => {
     }
   }
 
-  return [...byCloseTime.values()].sort((left, right) => left.closeTime.localeCompare(right.closeTime));
+  return [...byCloseTime.values()].sort((left, right) =>
+    left.closeTime.localeCompare(right.closeTime)
+  );
 };
 
 export const analyzeCandleSeries = (
@@ -71,7 +78,9 @@ export const analyzeCandleSeries = (
     const diff = current - previous;
 
     if (diff <= 0) {
-      issues.push(`Non-increasing candle timestamps at ${normalized[index]!.closeTime}.`);
+      issues.push(
+        `Non-increasing candle timestamps at ${normalized[index]!.closeTime}.`
+      );
       continue;
     }
 
@@ -82,7 +91,9 @@ export const analyzeCandleSeries = (
 
   const latestCloseTime = normalized.at(-1)?.closeTime ?? null;
   const stale =
-    latestCloseTime === null ? true : nowMs - new Date(latestCloseTime).getTime() > intervalMs * 2;
+    latestCloseTime === null
+      ? true
+      : nowMs - new Date(latestCloseTime).getTime() > intervalMs * 2;
 
   if (duplicates > 0) {
     issues.push(`Detected ${duplicates} duplicate candle close timestamps.`);
@@ -102,7 +113,7 @@ export const analyzeCandleSeries = (
     missingIntervals,
     stale,
     latestCloseTime,
-    issues
+    issues,
   };
 };
 
@@ -133,12 +144,15 @@ export class MarketDataAdapter {
         this.lastRequestAt = Date.now();
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+        const timeout = setTimeout(
+          () => controller.abort(),
+          this.config.timeoutMs
+        );
         const response = await fetch(url, {
           signal: controller.signal,
           headers: {
-            accept: 'application/json'
-          }
+            accept: 'application/json',
+          },
         });
         clearTimeout(timeout);
 
@@ -149,27 +163,46 @@ export class MarketDataAdapter {
         return (await response.json()) as T;
       } catch (error) {
         lastError = error;
-        this.logger.warn({ attempt, url, error }, 'Market data fetch attempt failed.');
+        this.logger.warn(
+          { attempt, url, error },
+          'Market data fetch attempt failed.'
+        );
         await sleep(250 * attempt);
       }
     }
 
-    throw lastError instanceof Error ? lastError : new Error('Unknown market data fetch error.');
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('Unknown market data fetch error.');
   }
 
-  async fetchRecentCandles(symbol: string, timeframe: Timeframe, limit: number): Promise<Candle[]> {
+  async fetchRecentCandles(
+    symbol: string,
+    timeframe: Timeframe,
+    limit: number
+  ): Promise<Candle[]> {
     const normalized = normalizeSymbol(symbol);
 
     if (this.config.exchange === 'bybit') {
       return this.fetchBybitCandles(normalized, timeframe, limit);
     }
 
+    if (this.config.exchange === 'okx') {
+      return this.fetchOkxCandles(normalized, timeframe, limit);
+    }
+
     return this.fetchBinanceCandles(normalized, timeframe, limit);
   }
 
-  private async fetchBybitCandles(symbol: string, timeframe: Timeframe, limit: number): Promise<Candle[]> {
+  private async fetchBybitCandles(
+    symbol: string,
+    timeframe: Timeframe,
+    limit: number
+  ): Promise<Candle[]> {
     const market = symbolToExchangeMarket(symbol);
-    const interval = timeframe.endsWith('m') ? timeframe.slice(0, -1) : timeframe;
+    const interval = timeframe.endsWith('m')
+      ? timeframe.slice(0, -1)
+      : timeframe;
     const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${market}&interval=${interval}&limit=${limit}`;
     const payload = await this.fetchJson<{
       result?: {
@@ -196,17 +229,24 @@ export class MarketDataAdapter {
           low: Number(entry[3]),
           close: Number(entry[4]),
           volume: Number(entry[5]),
-          source: 'bybit-rest'
+          source: 'bybit-rest',
         } satisfies Candle;
       })
       .filter((candle) => new Date(candle.closeTime).getTime() <= now)
       .sort((left, right) => left.closeTime.localeCompare(right.closeTime));
   }
 
-  private async fetchBinanceCandles(symbol: string, timeframe: Timeframe, limit: number): Promise<Candle[]> {
+  private async fetchBinanceCandles(
+    symbol: string,
+    timeframe: Timeframe,
+    limit: number
+  ): Promise<Candle[]> {
     const market = symbolToExchangeMarket(symbol);
     const url = `https://api.binance.com/api/v3/klines?symbol=${market}&interval=${timeframe}&limit=${limit}`;
-    const payload = await this.fetchJson<Array<[number, string, string, string, string, string, number]>>(url);
+    const payload =
+      await this.fetchJson<
+        Array<[number, string, string, string, string, string, number]>
+      >(url);
     const candleMs = timeframeToMs(timeframe);
     const now = Date.now();
 
@@ -226,8 +266,44 @@ export class MarketDataAdapter {
           low: Number(entry[3]),
           close: Number(entry[4]),
           volume: Number(entry[5]),
-          source: 'binance-rest'
+          source: 'binance-rest',
         };
+      })
+      .filter((candle) => new Date(candle.closeTime).getTime() <= now)
+      .sort((left, right) => left.closeTime.localeCompare(right.closeTime));
+  }
+
+  private async fetchOkxCandles(
+    symbol: string,
+    timeframe: Timeframe,
+    limit: number
+  ): Promise<Candle[]> {
+    const market = normalizeSymbol(symbol).replace('/', '-');
+    const url = `https://www.okx.com/api/v5/market/candles?instId=${market}&bar=${timeframe}&limit=${limit}`;
+    const payload = await this.fetchJson<{
+      data?: string[][];
+    }>(url);
+    const candleMs = timeframeToMs(timeframe);
+    const now = Date.now();
+
+    return (payload.data ?? [])
+      .map((entry) => {
+        const openTime = Number(entry[0]);
+        const closeTime = openTime + candleMs;
+
+        return {
+          exchange: 'okx',
+          symbol,
+          timeframe,
+          openTime: new Date(openTime).toISOString(),
+          closeTime: new Date(closeTime).toISOString(),
+          open: Number(entry[1]),
+          high: Number(entry[2]),
+          low: Number(entry[3]),
+          close: Number(entry[4]),
+          volume: Number(entry[5]),
+          source: 'okx-rest',
+        } satisfies Candle;
       })
       .filter((candle) => new Date(candle.closeTime).getTime() <= now)
       .sort((left, right) => left.closeTime.localeCompare(right.closeTime));

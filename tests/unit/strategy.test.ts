@@ -1,12 +1,19 @@
 import { POSITION_SIDES, SIGNAL_TYPES } from '@medvedsson/shared';
-import { computeBaselineMagnitude, computeReturn, evaluateMomentumStrategy } from '@medvedsson/strategy';
+import {
+  computeBaselineMagnitude,
+  computeReturn,
+  evaluateMomentumStrategy,
+} from '@medvedsson/strategy';
 
 import { generateCandles } from '../helpers.ts';
 
 describe('strategy formula', () => {
   it('computes returns and baseline magnitude using the exact 96-bar definition', () => {
     expect(computeReturn(105, 100)).toBeCloseTo(0.05, 10);
-    expect(computeBaselineMagnitude([0.01, -0.02, 0.03], 3)).toBeCloseTo(0.02, 10);
+    expect(computeBaselineMagnitude([0.01, -0.02, 0.03], 3)).toBeCloseTo(
+      0.02,
+      10
+    );
   });
 
   it('emits LONG when r_t exceeds 5 x B_t', () => {
@@ -18,7 +25,7 @@ describe('strategy formula', () => {
         n: 96,
         k: 5,
         hBars: 72,
-        timeframe: '5m'
+        timeframe: '5m',
       },
       null
     );
@@ -36,7 +43,7 @@ describe('strategy formula', () => {
         n: 96,
         k: 5,
         hBars: 72,
-        timeframe: '5m'
+        timeframe: '5m',
       },
       {
         id: 'pos-1',
@@ -45,7 +52,9 @@ describe('strategy formula', () => {
         entryPrice: 100,
         qty: 1,
         notionalUsdt: 100,
-        entryFee: 0.1
+        entryFee: 0.1,
+        broker: 'bybit',
+        isCounterPosition: false,
       }
     );
 

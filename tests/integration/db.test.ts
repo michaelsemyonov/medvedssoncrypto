@@ -221,6 +221,7 @@ describe('database integration', () => {
         runId: run.id,
         signalId: 'btc-open',
         symbolId: btc!.id,
+        broker: 'bybit',
         orderType: 'MARKET',
         side: 'BUY',
         intent: 'OPEN_POSITION',
@@ -244,6 +245,7 @@ describe('database integration', () => {
         runId: run.id,
         signalId: 'eth-open',
         symbolId: eth!.id,
+        broker: 'bybit',
         orderType: 'MARKET',
         side: 'BUY',
         intent: 'OPEN_POSITION',
@@ -275,6 +277,7 @@ describe('database integration', () => {
         runId: run.id,
         signalId: 'btc-close',
         symbolId: btc!.id,
+        broker: 'bybit',
         orderType: 'MARKET',
         side: 'SELL',
         intent: 'CLOSE_POSITION',
@@ -301,6 +304,7 @@ describe('database integration', () => {
         runId: run.id,
         signalId: 'eth-close',
         symbolId: eth!.id,
+        broker: 'bybit',
         orderType: 'MARKET',
         side: 'SELL',
         intent: 'CLOSE_POSITION',
@@ -383,9 +387,7 @@ describe('database integration', () => {
       expect(latest?.candle_close_time.toISOString()).toBe(
         '2026-01-01T00:05:00.000Z'
       );
-      expect(latest?.created_at.toISOString()).toBe(
-        '2026-01-01T00:06:00.000Z'
-      );
+      expect(latest?.created_at.toISOString()).toBe('2026-01-01T00:06:00.000Z');
     } finally {
       vi.useRealTimers();
       await db.close();
@@ -440,6 +442,7 @@ describe('database integration', () => {
         runId: run.id,
         signalId: signal.id,
         symbolId: symbol!.id,
+        broker: 'bybit',
         orderType: 'MARKET',
         side: 'BUY',
         intent: 'OPEN_POSITION',
@@ -452,17 +455,14 @@ describe('database integration', () => {
         fillModel: 'next_open',
         meta: {},
       });
-      await db.fillPendingOrder(
-        openOrder!.id,
-        100,
-        '2026-01-01T00:05:00.000Z'
-      );
+      await db.fillPendingOrder(openOrder!.id, 100, '2026-01-01T00:05:00.000Z');
 
       const [openPosition] = await db.getOpenPositions(run.id);
       const closeOrder = await db.createPendingOrder({
         runId: run.id,
         signalId: 'close-signal',
         symbolId: symbol!.id,
+        broker: 'bybit',
         orderType: 'MARKET',
         side: 'SELL',
         intent: 'CLOSE_POSITION',
@@ -513,13 +513,21 @@ describe('database integration', () => {
       userLabel: null,
     });
 
-    (db as unknown as { pushSubscriptions: Array<{ symbolFilters?: string[] | null }> })
-      .pushSubscriptions[0]!.symbolFilters = ['BTC/USDT'];
+    (
+      db as unknown as {
+        pushSubscriptions: Array<{ symbolFilters?: string[] | null }>;
+      }
+    ).pushSubscriptions[0]!.symbolFilters = ['BTC/USDT'];
 
-    const subscriptions = await db.getPushSubscriptionsForEvent('ETH/USDT', 'entry');
+    const subscriptions = await db.getPushSubscriptionsForEvent(
+      'ETH/USDT',
+      'entry'
+    );
 
     expect(subscriptions).toHaveLength(1);
-    expect(subscriptions[0]?.endpoint).toBe('https://example.com/push/device-1');
+    expect(subscriptions[0]?.endpoint).toBe(
+      'https://example.com/push/device-1'
+    );
 
     await db.close();
   });

@@ -1,5 +1,16 @@
-import type { OrderIntent, OrderSide, PositionSide, SignalType, Timeframe } from './types.ts';
-import { ORDER_INTENTS, ORDER_SIDES, POSITION_SIDES, SIGNAL_TYPES } from './types.ts';
+import type {
+  OrderIntent,
+  OrderSide,
+  PositionSide,
+  SignalType,
+  Timeframe,
+} from './types.ts';
+import {
+  ORDER_INTENTS,
+  ORDER_SIDES,
+  POSITION_SIDES,
+  SIGNAL_TYPES,
+} from './types.ts';
 
 type TimeZoneDateParts = {
   year: number;
@@ -129,7 +140,8 @@ export const normalizeSymbol = (symbol: string): string => {
   return `${base}/${quote}`;
 };
 
-export const symbolToExchangeMarket = (symbol: string): string => normalizeSymbol(symbol).replace('/', '');
+export const symbolToExchangeMarket = (symbol: string): string =>
+  normalizeSymbol(symbol).replace('/', '');
 
 export const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -165,7 +177,9 @@ export const getDayBoundsInTimeZone = (
     },
     timeZone
   );
-  const nextDay = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1));
+  const nextDay = new Date(
+    Date.UTC(parts.year, parts.month - 1, parts.day + 1)
+  );
   const end = zonedDateTimeToUtcMs(
     {
       year: nextDay.getUTCFullYear(),
@@ -182,34 +196,74 @@ export const getDayBoundsInTimeZone = (
   };
 };
 
-export const getPositionSideFromSignal = (signalType: SignalType): PositionSide | null => {
-  if (signalType === SIGNAL_TYPES.LONG_ENTRY || signalType === SIGNAL_TYPES.LONG_EXIT) {
+export const getPositionSideFromSignal = (
+  signalType: SignalType
+): PositionSide | null => {
+  if (
+    signalType === SIGNAL_TYPES.LONG_ENTRY ||
+    signalType === SIGNAL_TYPES.LONG_EXIT
+  ) {
     return POSITION_SIDES.LONG;
   }
 
-  if (signalType === SIGNAL_TYPES.SHORT_ENTRY || signalType === SIGNAL_TYPES.SHORT_EXIT) {
+  if (
+    signalType === SIGNAL_TYPES.SHORT_ENTRY ||
+    signalType === SIGNAL_TYPES.SHORT_EXIT
+  ) {
     return POSITION_SIDES.SHORT;
   }
 
   return null;
 };
 
-export const getOrderIntentFromSignal = (signalType: SignalType): OrderIntent | null => {
-  if (signalType === SIGNAL_TYPES.LONG_ENTRY || signalType === SIGNAL_TYPES.SHORT_ENTRY) {
+export const getOrderIntentFromSignal = (
+  signalType: SignalType
+): OrderIntent | null => {
+  if (
+    signalType === SIGNAL_TYPES.LONG_ENTRY ||
+    signalType === SIGNAL_TYPES.SHORT_ENTRY
+  ) {
     return ORDER_INTENTS.OPEN_POSITION;
   }
 
-  if (signalType === SIGNAL_TYPES.LONG_EXIT || signalType === SIGNAL_TYPES.SHORT_EXIT) {
+  if (
+    signalType === SIGNAL_TYPES.LONG_EXIT ||
+    signalType === SIGNAL_TYPES.SHORT_EXIT
+  ) {
     return ORDER_INTENTS.CLOSE_POSITION;
   }
 
   return null;
 };
 
-export const getOrderSide = (positionSide: PositionSide, intent: OrderIntent): OrderSide => {
+export const getOrderSide = (
+  positionSide: PositionSide,
+  intent: OrderIntent
+): OrderSide => {
   if (positionSide === POSITION_SIDES.LONG) {
-    return intent === ORDER_INTENTS.OPEN_POSITION ? ORDER_SIDES.BUY : ORDER_SIDES.SELL;
+    return intent === ORDER_INTENTS.OPEN_POSITION
+      ? ORDER_SIDES.BUY
+      : ORDER_SIDES.SELL;
   }
 
-  return intent === ORDER_INTENTS.OPEN_POSITION ? ORDER_SIDES.SELL : ORDER_SIDES.BUY;
+  return intent === ORDER_INTENTS.OPEN_POSITION
+    ? ORDER_SIDES.SELL
+    : ORDER_SIDES.BUY;
 };
+
+export const getOppositePositionSide = (side: PositionSide): PositionSide =>
+  side === POSITION_SIDES.LONG ? POSITION_SIDES.SHORT : POSITION_SIDES.LONG;
+
+export const getEntrySignalTypeForPositionSide = (
+  side: PositionSide
+): SignalType =>
+  side === POSITION_SIDES.LONG
+    ? SIGNAL_TYPES.LONG_ENTRY
+    : SIGNAL_TYPES.SHORT_ENTRY;
+
+export const getExitSignalTypeForPositionSide = (
+  side: PositionSide
+): SignalType =>
+  side === POSITION_SIDES.LONG
+    ? SIGNAL_TYPES.LONG_EXIT
+    : SIGNAL_TYPES.SHORT_EXIT;

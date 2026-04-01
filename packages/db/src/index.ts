@@ -7,6 +7,7 @@ import {
 } from '@medvedsson/execution';
 import type {
   AppConfig,
+  BrokerName,
   Candle,
   ExchangeName,
   OpenPositionContext,
@@ -50,6 +51,8 @@ type SymbolRow = {
   exchange: ExchangeName;
   exchange_timeout_ms: number;
   exchange_rate_limit_ms: number;
+  position_broker: BrokerName;
+  counter_position_broker: BrokerName;
   symbol: string;
   base_asset: string;
   quote_asset: string;
@@ -69,6 +72,7 @@ type SymbolRow = {
   equity_start_usdt: number;
   max_open_positions: number;
   cooldown_bars: number;
+  stop_loss_pct: number;
   max_daily_drawdown_pct: number;
   max_consecutive_losses: number;
   poll_interval_ms: number;
@@ -110,6 +114,8 @@ type PositionRow = {
   id: string;
   strategy_run_id: string;
   symbol_id: string;
+  broker: BrokerName;
+  is_counter_position: boolean;
   side: 'LONG' | 'SHORT';
   status: 'OPEN' | 'CLOSED';
   entry_time: Date;
@@ -141,6 +147,7 @@ type SimulatedOrderRow = {
   position_id: string | null;
   signal_id: string;
   symbol_id: string;
+  broker: BrokerName;
   order_type: string;
   side: 'BUY' | 'SELL';
   intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
@@ -278,6 +285,8 @@ const normalizeSymbolRow = (row: MysqlRow): SymbolRow => ({
   exchange: String(row.exchange) as ExchangeName,
   exchange_timeout_ms: Number(row.exchange_timeout_ms),
   exchange_rate_limit_ms: Number(row.exchange_rate_limit_ms),
+  position_broker: String(row.position_broker) as BrokerName,
+  counter_position_broker: String(row.counter_position_broker) as BrokerName,
   symbol: String(row.symbol),
   base_asset: String(row.base_asset),
   quote_asset: String(row.quote_asset),
@@ -299,6 +308,7 @@ const normalizeSymbolRow = (row: MysqlRow): SymbolRow => ({
   equity_start_usdt: Number(row.equity_start_usdt),
   max_open_positions: Number(row.max_open_positions),
   cooldown_bars: Number(row.cooldown_bars),
+  stop_loss_pct: Number(row.stop_loss_pct),
   max_daily_drawdown_pct: Number(row.max_daily_drawdown_pct),
   max_consecutive_losses: Number(row.max_consecutive_losses),
   poll_interval_ms: Number(row.poll_interval_ms),
@@ -315,6 +325,11 @@ const normalizeSymbolSettings = (
     settings.exchangeTimeoutMs ?? DEFAULT_SYMBOL_SETTINGS.exchangeTimeoutMs,
   exchangeRateLimitMs:
     settings.exchangeRateLimitMs ?? DEFAULT_SYMBOL_SETTINGS.exchangeRateLimitMs,
+  positionBroker:
+    settings.positionBroker ?? DEFAULT_SYMBOL_SETTINGS.positionBroker,
+  counterPositionBroker:
+    settings.counterPositionBroker ??
+    DEFAULT_SYMBOL_SETTINGS.counterPositionBroker,
   timeframe: settings.timeframe ?? DEFAULT_SYMBOL_SETTINGS.timeframe,
   dryRun: settings.dryRun ?? DEFAULT_SYMBOL_SETTINGS.dryRun,
   allowShort: settings.allowShort ?? DEFAULT_SYMBOL_SETTINGS.allowShort,
@@ -352,6 +367,7 @@ const normalizeSymbolSettings = (
   maxOpenPositions:
     settings.maxOpenPositions ?? DEFAULT_SYMBOL_SETTINGS.maxOpenPositions,
   cooldownBars: settings.cooldownBars ?? DEFAULT_SYMBOL_SETTINGS.cooldownBars,
+  stopLossPct: settings.stopLossPct ?? DEFAULT_SYMBOL_SETTINGS.stopLossPct,
   maxDailyDrawdownPct:
     settings.maxDailyDrawdownPct ?? DEFAULT_SYMBOL_SETTINGS.maxDailyDrawdownPct,
   maxConsecutiveLosses:
@@ -365,6 +381,8 @@ const getSymbolRuntimeSettings = (row: SymbolRow): SymbolRuntimeSettings => ({
   exchange: row.exchange,
   exchangeTimeoutMs: row.exchange_timeout_ms,
   exchangeRateLimitMs: row.exchange_rate_limit_ms,
+  positionBroker: row.position_broker,
+  counterPositionBroker: row.counter_position_broker,
   timeframe: row.timeframe,
   dryRun: row.dry_run,
   allowShort: row.allow_short,
@@ -386,6 +404,7 @@ const getSymbolRuntimeSettings = (row: SymbolRow): SymbolRuntimeSettings => ({
   },
   maxOpenPositions: row.max_open_positions,
   cooldownBars: row.cooldown_bars,
+  stopLossPct: row.stop_loss_pct,
   maxDailyDrawdownPct: row.max_daily_drawdown_pct,
   maxConsecutiveLosses: row.max_consecutive_losses,
   pollIntervalMs: row.poll_interval_ms,
@@ -420,6 +439,8 @@ const normalizePositionRow = (row: MysqlRow): PositionRow => ({
   id: String(row.id),
   strategy_run_id: String(row.strategy_run_id),
   symbol_id: String(row.symbol_id),
+  broker: String(row.broker) as BrokerName,
+  is_counter_position: parseBoolean(row.is_counter_position),
   side: String(row.side) as PositionRow['side'],
   status: String(row.status) as PositionRow['status'],
   entry_time: parseDate(row.entry_time)!,
@@ -457,6 +478,7 @@ const normalizeSimulatedOrderRow = (row: MysqlRow): SimulatedOrderRow => ({
   position_id: row.position_id === null ? null : String(row.position_id),
   signal_id: String(row.signal_id),
   symbol_id: String(row.symbol_id),
+  broker: String(row.broker) as BrokerName,
   order_type: String(row.order_type),
   side: String(row.side) as SimulatedOrderRow['side'],
   intent: String(row.intent) as SimulatedOrderRow['intent'],
@@ -669,6 +691,8 @@ export class MedvedssonDatabase {
          exchange,
          exchange_timeout_ms,
          exchange_rate_limit_ms,
+         position_broker,
+         counter_position_broker,
          symbol,
          base_asset,
          quote_asset,
@@ -688,15 +712,18 @@ export class MedvedssonDatabase {
          equity_start_usdt,
          max_open_positions,
          cooldown_bars,
+         stop_loss_pct,
          max_daily_drawdown_pct,
          max_consecutive_losses,
          poll_interval_ms,
          active
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          exchange_timeout_ms = VALUES(exchange_timeout_ms),
          exchange_rate_limit_ms = VALUES(exchange_rate_limit_ms),
+         position_broker = VALUES(position_broker),
+         counter_position_broker = VALUES(counter_position_broker),
          base_asset = VALUES(base_asset),
          quote_asset = VALUES(quote_asset),
          timeframe = VALUES(timeframe),
@@ -715,6 +742,7 @@ export class MedvedssonDatabase {
          equity_start_usdt = VALUES(equity_start_usdt),
          max_open_positions = VALUES(max_open_positions),
          cooldown_bars = VALUES(cooldown_bars),
+         stop_loss_pct = VALUES(stop_loss_pct),
          max_daily_drawdown_pct = VALUES(max_daily_drawdown_pct),
          max_consecutive_losses = VALUES(max_consecutive_losses),
          poll_interval_ms = VALUES(poll_interval_ms),
@@ -725,6 +753,8 @@ export class MedvedssonDatabase {
         settings.exchange,
         settings.exchangeTimeoutMs,
         settings.exchangeRateLimitMs,
+        settings.positionBroker,
+        settings.counterPositionBroker,
         normalizedSymbol,
         baseAsset,
         quoteAsset,
@@ -744,6 +774,7 @@ export class MedvedssonDatabase {
         settings.execution.equityStartUsdt,
         settings.maxOpenPositions,
         settings.cooldownBars,
+        settings.stopLossPct,
         settings.maxDailyDrawdownPct,
         settings.maxConsecutiveLosses,
         settings.pollIntervalMs,
@@ -863,6 +894,8 @@ export class MedvedssonDatabase {
        SET exchange = ?,
            exchange_timeout_ms = ?,
            exchange_rate_limit_ms = ?,
+           position_broker = ?,
+           counter_position_broker = ?,
            symbol = ?,
            base_asset = ?,
            quote_asset = ?,
@@ -882,6 +915,7 @@ export class MedvedssonDatabase {
            equity_start_usdt = ?,
            max_open_positions = ?,
            cooldown_bars = ?,
+           stop_loss_pct = ?,
            max_daily_drawdown_pct = ?,
            max_consecutive_losses = ?,
            poll_interval_ms = ?,
@@ -892,6 +926,8 @@ export class MedvedssonDatabase {
         settings.exchange,
         settings.exchangeTimeoutMs,
         settings.exchangeRateLimitMs,
+        settings.positionBroker,
+        settings.counterPositionBroker,
         normalizedSymbol,
         baseAsset,
         quoteAsset,
@@ -911,6 +947,7 @@ export class MedvedssonDatabase {
         settings.execution.equityStartUsdt,
         settings.maxOpenPositions,
         settings.cooldownBars,
+        settings.stopLossPct,
         settings.maxDailyDrawdownPct,
         settings.maxConsecutiveLosses,
         settings.pollIntervalMs,
@@ -1217,6 +1254,8 @@ export class MedvedssonDatabase {
       qty: row.qty,
       notionalUsdt: row.notional_usdt,
       entryFee: row.entry_fee,
+      broker: row.broker,
+      isCounterPosition: row.is_counter_position,
     };
   }
 
@@ -1356,6 +1395,7 @@ export class MedvedssonDatabase {
     runId: string;
     signalId: string;
     symbolId: string;
+    broker: BrokerName;
     orderType: string;
     side: 'BUY' | 'SELL';
     intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
@@ -1378,6 +1418,7 @@ export class MedvedssonDatabase {
          position_id,
          signal_id,
          symbol_id,
+         broker,
          order_type,
          side,
          intent,
@@ -1391,13 +1432,14 @@ export class MedvedssonDatabase {
          status,
          meta
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)`,
       [
         orderId,
         params.runId,
         params.positionId ?? null,
         params.signalId,
         params.symbolId,
+        params.broker,
         params.orderType,
         params.side,
         params.intent,
@@ -1487,6 +1529,8 @@ export class MedvedssonDatabase {
              id,
              strategy_run_id,
              symbol_id,
+             broker,
+             is_counter_position,
              side,
              status,
              entry_time,
@@ -1497,11 +1541,13 @@ export class MedvedssonDatabase {
              opened_by_signal_id,
              open_slot
            )
-           VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?, ?)`,
           [
             randomUUID(),
             order.strategy_run_id,
             order.symbol_id,
+            order.broker,
+            Boolean(order.meta.is_counter_position),
             order.side === 'BUY' ? 'LONG' : 'SHORT',
             toMysqlDateTime(fillTime),
             finalFillPrice,

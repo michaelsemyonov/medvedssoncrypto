@@ -249,4 +249,20 @@ export const MIGRATIONS: Array<{ id: string; sql: string }> = [
         AND (oo.filled_at IS NULL OR oo.filled_at <> p.exit_time);
     `,
   },
+  {
+    id: '005_stop_loss_and_brokers',
+    sql: `
+      ALTER TABLE symbols
+      ADD COLUMN position_broker VARCHAR(32) NOT NULL DEFAULT 'bybit' AFTER exchange_rate_limit_ms,
+      ADD COLUMN counter_position_broker VARCHAR(32) NOT NULL DEFAULT 'okx' AFTER position_broker,
+      ADD COLUMN stop_loss_pct DOUBLE NOT NULL DEFAULT 2 AFTER cooldown_bars;
+
+      ALTER TABLE positions
+      ADD COLUMN broker VARCHAR(32) NOT NULL DEFAULT 'bybit' AFTER symbol_id,
+      ADD COLUMN is_counter_position BOOLEAN NOT NULL DEFAULT FALSE AFTER broker;
+
+      ALTER TABLE simulated_orders
+      ADD COLUMN broker VARCHAR(32) NOT NULL DEFAULT 'bybit' AFTER symbol_id;
+    `,
+  },
 ];

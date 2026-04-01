@@ -12,10 +12,21 @@ import {
 import type { NotificationService } from '@medvedsson/notifications';
 import type {
   AppConfig,
+  BrokerName,
   Candle,
+  OpenPositionContext,
+  RiskDecision,
+  StrategySignal,
   SymbolRuntimeSettings,
 } from '@medvedsson/shared';
-import { round, SIGNAL_TYPES, timeframeToMs } from '@medvedsson/shared';
+import {
+  getEntrySignalTypeForPositionSide,
+  getExitSignalTypeForPositionSide,
+  getOppositePositionSide,
+  round,
+  SIGNAL_TYPES,
+  timeframeToMs,
+} from '@medvedsson/shared';
 import {
   evaluateMomentumStrategy,
   requiredCandles,
@@ -167,6 +178,8 @@ export class TradingRunner {
       exchange: symbol.exchange,
       exchangeTimeoutMs: symbol.exchange_timeout_ms,
       exchangeRateLimitMs: symbol.exchange_rate_limit_ms,
+      positionBroker: symbol.position_broker,
+      counterPositionBroker: symbol.counter_position_broker,
       timeframe: symbol.timeframe,
       dryRun: symbol.dry_run,
       allowShort: symbol.allow_short,
@@ -188,6 +201,7 @@ export class TradingRunner {
       },
       maxOpenPositions: symbol.max_open_positions,
       cooldownBars: symbol.cooldown_bars,
+      stopLossPct: symbol.stop_loss_pct,
       maxDailyDrawdownPct: symbol.max_daily_drawdown_pct,
       maxConsecutiveLosses: symbol.max_consecutive_losses,
       pollIntervalMs: symbol.poll_interval_ms,
@@ -340,6 +354,297 @@ export class TradingRunner {
     await this.recordEquity(runId, candle.closeTime, activeSymbols);
   }
 
+  private buildApprovedDecision(
+    signal: StrategySignal,
+    snapshot: Record<string, unknown>
+  ): RiskDecision {
+    return {
+      approved: true,
+      rejectionCode: null,
+      rejectionReason: null,
+      snapshot,
+    };
+  }
+
+  private buildStopLossSignal(params: {
+    symbol: SymbolRecord;
+    signalType: StrategySignal['signalType'];
+    candleCloseTime: string;
+    reason: string;
+    comparison: 'LONG' | 'SHORT' | 'EXIT';
+    triggerPrice: number;
+    stopLossPct: number;
+    broker: BrokerName;
+    isCounterPosition: boolean;
+  }): StrategySignal {
+    return {
+      signalType: params.signalType,
+      candleCloseTime: params.candleCloseTime,
+      signalStrength: 1,
+      formulaInputs: {
+        r_t: null,
+        B_t: null,
+        N: Number(params.symbol.signal_n),
+        k: Number(params.symbol.signal_k),
+        H: Number(params.symbol.signal_h_bars),
+        threshold: params.triggerPrice,
+        comparison: params.comparison,
+      },
+      indicators: {
+        stopLossPrice: params.triggerPrice,
+        stopLossPct: params.stopLossPct,
+      },
+      features: {
+        source: 'stop_loss',
+        broker: params.broker,
+        isCounterPosition: params.isCounterPosition,
+      },
+      reason: params.reason,
+    };
+  }
+
+  private async applySignal(params: {
+    runId: string;
+    symbol: SymbolRecord;
+    candle: Candle;
+    signal: StrategySignal;
+    decision: RiskDecision;
+    openPosition: OpenPositionContext | null;
+    broker: BrokerName;
+    isCounterPosition?: boolean;
+    immediateFill?: {
+      price: number;
+      time: string;
+    };
+  }): Promise<void> {
+    const settings = this.getSymbolSettings(params.symbol);
+    const signalRow = await this.db.insertSignal({
+      runId: params.runId,
+      symbolId: params.symbol.id,
+      exchange: params.symbol.exchange,
+      symbol: params.symbol.symbol,
+      timeframe: params.symbol.timeframe,
+      signal: params.signal,
+    });
+
+    signalsCreatedCounter.inc({
+      symbol: params.symbol.symbol,
+      signal_type: params.signal.signalType,
+    });
+
+    await this.db.updateSignalDecision(signalRow.id, params.decision);
+    await this.db.insertRiskEvent({
+      runId: params.runId,
+      signalId: signalRow.id,
+      symbolId: params.symbol.id,
+      decision: params.decision,
+    });
+
+    signalDecisionCounter.inc({
+      symbol: params.symbol.symbol,
+      approved: String(params.decision.approved),
+    });
+
+    if (params.decision.approved) {
+      const executionResult = await this.getExecutionAdapter(
+        params.symbol
+      ).handleApprovedSignal({
+        runId: params.runId,
+        signalId: signalRow.id,
+        symbolId: params.symbol.id,
+        broker: params.broker,
+        signalType: params.signal.signalType,
+        referencePrice: params.candle.close,
+        scheduledForOpenTime: params.candle.closeTime,
+        openPosition: params.openPosition,
+        isCounterPosition: params.isCounterPosition,
+        immediateFill: params.immediateFill,
+      });
+
+      if (executionResult.orderCreated && executionResult.intent) {
+        simulatedOrdersCounter.inc({
+          symbol: params.symbol.symbol,
+          intent: executionResult.intent,
+        });
+      }
+
+      await this.notifications.notifySignal({
+        symbol: params.symbol.symbol,
+        signalType: params.signal.signalType,
+        signalTime: params.signal.candleCloseTime,
+        strategyVersion: settings.strategyVersion,
+        reason: params.signal.reason,
+        approved: true,
+        referencePrice: params.candle.close,
+      });
+
+      return;
+    }
+
+    await this.notifications.notifySignal({
+      symbol: params.symbol.symbol,
+      signalType: params.signal.signalType,
+      signalTime: params.signal.candleCloseTime,
+      strategyVersion: settings.strategyVersion,
+      reason: params.decision.rejectionReason ?? params.signal.reason,
+      approved: false,
+      referencePrice: params.candle.close,
+    });
+  }
+
+  private resolveStopLoss(
+    symbol: SymbolRecord,
+    candle: Candle,
+    openPosition: OpenPositionContext | null
+  ): { triggerPrice: number; stopLossPct: number; usesEntryPrice: boolean } | null {
+    if (!openPosition) {
+      return null;
+    }
+
+    const settings = this.getSymbolSettings(symbol);
+
+    if (openPosition.isCounterPosition) {
+      const triggerPrice = round(openPosition.entryPrice, 8);
+
+      if (openPosition.side === 'LONG') {
+        return candle.low <= triggerPrice
+          ? { triggerPrice, stopLossPct: 0, usesEntryPrice: true }
+          : null;
+      }
+
+      return candle.high >= triggerPrice
+        ? { triggerPrice, stopLossPct: 0, usesEntryPrice: true }
+        : null;
+    }
+
+    if (settings.stopLossPct <= 0) {
+      return null;
+    }
+
+    if (openPosition.side === 'LONG') {
+      const triggerPrice = round(
+        openPosition.entryPrice * (1 - settings.stopLossPct / 100),
+        8
+      );
+
+      return candle.low <= triggerPrice
+        ? { triggerPrice, stopLossPct: settings.stopLossPct, usesEntryPrice: false }
+        : null;
+    }
+
+    const triggerPrice = round(
+      openPosition.entryPrice * (1 + settings.stopLossPct / 100),
+      8
+    );
+
+    return candle.high >= triggerPrice
+      ? { triggerPrice, stopLossPct: settings.stopLossPct, usesEntryPrice: false }
+      : null;
+  }
+
+  private async handleStopLoss(
+    runId: string,
+    symbol: SymbolRecord,
+    candle: Candle,
+    openPosition: OpenPositionContext,
+    activeSymbols: SymbolRecord[]
+  ): Promise<boolean> {
+    const settings = this.getSymbolSettings(symbol);
+    const stopLoss = this.resolveStopLoss(symbol, candle, openPosition);
+
+    if (!stopLoss) {
+      return false;
+    }
+
+    const closeSignal = this.buildStopLossSignal({
+      symbol,
+      signalType: getExitSignalTypeForPositionSide(openPosition.side),
+      candleCloseTime: candle.closeTime,
+      reason: stopLoss.usesEntryPrice
+        ? `Stop loss hit at entry price ${stopLoss.triggerPrice}.`
+        : `Stop loss hit at ${stopLoss.triggerPrice} (${stopLoss.stopLossPct}% from entry).`,
+      comparison: 'EXIT',
+      triggerPrice: stopLoss.triggerPrice,
+      stopLossPct: stopLoss.stopLossPct,
+      broker: openPosition.broker,
+      isCounterPosition: openPosition.isCounterPosition,
+    });
+    const closeDecision = this.buildApprovedDecision(closeSignal, {
+      source: 'stop_loss',
+      broker: openPosition.broker,
+      isCounterPosition: openPosition.isCounterPosition,
+      triggerPrice: stopLoss.triggerPrice,
+      stopLossPct: stopLoss.stopLossPct,
+      usesEntryPrice: stopLoss.usesEntryPrice,
+    });
+
+    await this.applySignal({
+      runId,
+      symbol,
+      candle: {
+        ...candle,
+        close: stopLoss.triggerPrice,
+      },
+      signal: closeSignal,
+      decision: closeDecision,
+      openPosition,
+      broker: openPosition.broker,
+      isCounterPosition: openPosition.isCounterPosition,
+      immediateFill: {
+        price: stopLoss.triggerPrice,
+        time: candle.closeTime,
+      },
+    });
+
+    if (!openPosition.isCounterPosition) {
+      const counterSide = getOppositePositionSide(openPosition.side);
+      const counterSignal = this.buildStopLossSignal({
+        symbol,
+        signalType: getEntrySignalTypeForPositionSide(counterSide),
+        candleCloseTime: candle.closeTime,
+        reason: `Counter position opened after stop loss at ${stopLoss.triggerPrice}.`,
+        comparison: counterSide === 'LONG' ? 'LONG' : 'SHORT',
+        triggerPrice: stopLoss.triggerPrice,
+        stopLossPct: stopLoss.stopLossPct,
+        broker: settings.counterPositionBroker,
+        isCounterPosition: true,
+      });
+      const counterDecision = this.buildApprovedDecision(counterSignal, {
+        source: 'stop_loss_counter',
+        broker: settings.counterPositionBroker,
+        isCounterPosition: true,
+        triggerPrice: stopLoss.triggerPrice,
+        stopLossPct: settings.stopLossPct,
+      });
+
+      await this.applySignal({
+        runId,
+        symbol,
+        candle: {
+          ...candle,
+          close: stopLoss.triggerPrice,
+        },
+        signal: counterSignal,
+        decision: counterDecision,
+        openPosition: null,
+        broker: settings.counterPositionBroker,
+        isCounterPosition: true,
+        immediateFill: {
+          price: stopLoss.triggerPrice,
+          time: candle.closeTime,
+        },
+      });
+    }
+
+    await this.db.recordProcessedCandle({
+      runId,
+      symbolId: symbol.id,
+      candleCloseTime: candle.closeTime,
+    });
+    await this.finalizeProcessedCandle(runId, symbol, candle, activeSymbols);
+    return true;
+  }
+
   private async processCandle(
     runId: string,
     symbol: SymbolRecord,
@@ -352,6 +657,20 @@ export class TradingRunner {
     await this.processPendingOrders(runId, symbol, candle);
 
     const openPosition = await this.db.getOpenPosition(runId, symbol.id);
+
+    if (
+      openPosition &&
+      (await this.handleStopLoss(
+        runId,
+        symbol,
+        candle,
+        openPosition,
+        activeSymbols
+      ))
+    ) {
+      return;
+    }
+
     const signal = evaluateMomentumStrategy(
       history,
       settings.signal,
@@ -368,23 +687,10 @@ export class TradingRunner {
       return;
     }
 
-    const signalRow = await this.db.insertSignal({
-      runId,
-      symbolId: symbol.id,
-      exchange: symbol.exchange,
-      symbol: symbol.symbol,
-      timeframe: symbol.timeframe,
-      signal,
-    });
     await this.db.recordProcessedCandle({
       runId,
       symbolId: symbol.id,
       candleCloseTime: signal.candleCloseTime,
-    });
-
-    signalsCreatedCounter.inc({
-      symbol: symbol.symbol,
-      signal_type: signal.signalType,
     });
 
     const lastClosedPosition = await this.db.getLastClosedPosition(
@@ -411,60 +717,23 @@ export class TradingRunner {
       consecutiveLosses: await this.db.getConsecutiveLosses(runId),
       maxConsecutiveLosses: settings.maxConsecutiveLosses,
     });
+    const broker =
+      openPosition?.broker ??
+      (signal.signalType === SIGNAL_TYPES.LONG_ENTRY ||
+      signal.signalType === SIGNAL_TYPES.SHORT_ENTRY
+        ? settings.positionBroker
+        : settings.counterPositionBroker);
 
-    await this.db.updateSignalDecision(signalRow.id, decision);
-    await this.db.insertRiskEvent({
+    await this.applySignal({
       runId,
-      signalId: signalRow.id,
-      symbolId: symbol.id,
+      symbol,
+      candle,
+      signal,
       decision,
+      openPosition,
+      broker,
+      isCounterPosition: openPosition?.isCounterPosition ?? false,
     });
-
-    signalDecisionCounter.inc({
-      symbol: symbol.symbol,
-      approved: String(decision.approved),
-    });
-
-    if (decision.approved) {
-      const executionResult = await this.getExecutionAdapter(
-        symbol
-      ).handleApprovedSignal({
-        runId,
-        signalId: signalRow.id,
-        symbolId: symbol.id,
-        signalType: signal.signalType,
-        referencePrice: candle.close,
-        scheduledForOpenTime: candle.closeTime,
-        openPosition,
-      });
-
-      if (executionResult.orderCreated && executionResult.intent) {
-        simulatedOrdersCounter.inc({
-          symbol: symbol.symbol,
-          intent: executionResult.intent,
-        });
-      }
-
-      await this.notifications.notifySignal({
-        symbol: symbol.symbol,
-        signalType: signal.signalType,
-        signalTime: signal.candleCloseTime,
-        strategyVersion: settings.strategyVersion,
-        reason: signal.reason,
-        approved: true,
-        referencePrice: candle.close,
-      });
-    } else {
-      await this.notifications.notifySignal({
-        symbol: symbol.symbol,
-        signalType: signal.signalType,
-        signalTime: signal.candleCloseTime,
-        strategyVersion: settings.strategyVersion,
-        reason: decision.rejectionReason ?? signal.reason,
-        approved: false,
-        referencePrice: candle.close,
-      });
-    }
 
     await this.finalizeProcessedCandle(runId, symbol, candle, activeSymbols);
   }

@@ -1,15 +1,29 @@
 import { buildPendingOrder } from './simulation.ts';
 
-import type { ExecutionConfig, OpenPositionContext, OrderIntent, SignalType } from '@medvedsson/shared';
+import type {
+  BrokerName,
+  ExecutionConfig,
+  OpenPositionContext,
+  OrderIntent,
+  SignalType,
+} from '@medvedsson/shared';
 
 export type ExecutionRequest = {
   runId: string;
   signalId: string;
   symbolId: string;
+  broker: BrokerName;
   signalType: SignalType;
   referencePrice: number;
   scheduledForOpenTime: string;
   openPosition: OpenPositionContext | null;
+  isCounterPosition?: boolean | undefined;
+  immediateFill?:
+    | {
+        price: number;
+        time: string;
+      }
+    | undefined;
 };
 
 export type ExecutionResult = {
@@ -34,6 +48,7 @@ export type DryRunExecutionStore = {
     runId: string;
     signalId: string;
     symbolId: string;
+    broker: BrokerName;
     orderType: string;
     side: 'BUY' | 'SELL';
     intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
@@ -46,13 +61,20 @@ export type DryRunExecutionStore = {
     fillModel: string;
     positionId?: string | null;
     meta: Record<string, unknown>;
-  }): Promise<{ intent: 'OPEN_POSITION' | 'CLOSE_POSITION' } | null>;
+  }): Promise<{
+    id: string;
+    intent: 'OPEN_POSITION' | 'CLOSE_POSITION';
+  } | null>;
   getPendingOrdersForOpenTime(
     runId: string,
     symbolId: string,
     openTime: string
   ): Promise<Array<{ id: string }>>;
-  fillPendingOrder(orderId: string, fillPrice: number, fillTime: string): Promise<void>;
+  fillPendingOrder(
+    orderId: string,
+    fillPrice: number,
+    fillTime: string
+  ): Promise<void>;
 };
 
 export class DryRunExecutionAdapter implements ExecutionAdapter {
@@ -72,11 +94,17 @@ export class DryRunExecutionAdapter implements ExecutionAdapter {
     );
 
     for (const order of pendingOrders) {
-      await this.store.fillPendingOrder(order.id, request.openPrice, request.openTime);
+      await this.store.fillPendingOrder(
+        order.id,
+        request.openPrice,
+        request.openTime
+      );
     }
   }
 
-  async handleApprovedSignal(request: ExecutionRequest): Promise<ExecutionResult> {
+  async handleApprovedSignal(
+    request: ExecutionRequest
+  ): Promise<ExecutionResult> {
     const orderDraft = buildPendingOrder(
       request.signalType,
       request.referencePrice,
@@ -89,6 +117,7 @@ export class DryRunExecutionAdapter implements ExecutionAdapter {
       runId: request.runId,
       signalId: request.signalId,
       symbolId: request.symbolId,
+      broker: request.broker,
       orderType: 'MARKET',
       side: orderDraft.side,
       intent: orderDraft.intent,
@@ -100,12 +129,23 @@ export class DryRunExecutionAdapter implements ExecutionAdapter {
       feeAmount: orderDraft.feeAmount,
       fillModel: orderDraft.fillModel,
       positionId: request.openPosition?.id ?? null,
-      meta: orderDraft.meta
+      meta: {
+        ...orderDraft.meta,
+        is_counter_position: request.isCounterPosition ?? false,
+      },
     });
+
+    if (order && request.immediateFill) {
+      await this.store.fillPendingOrder(
+        order.id,
+        request.immediateFill.price,
+        request.immediateFill.time
+      );
+    }
 
     return {
       orderCreated: order !== null,
-      intent: order?.intent ?? null
+      intent: order?.intent ?? null,
     };
   }
 }

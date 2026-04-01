@@ -4,9 +4,11 @@ import { useState } from 'react';
 
 type ApiSymbol = {
   id: string;
-  exchange: 'bybit' | 'binance';
+  exchange: 'bybit' | 'binance' | 'okx';
   exchange_timeout_ms: number;
   exchange_rate_limit_ms: number;
+  position_broker: 'bybit' | 'okx';
+  counter_position_broker: 'bybit' | 'okx';
   symbol: string;
   base_asset: string;
   quote_asset: string;
@@ -26,6 +28,7 @@ type ApiSymbol = {
   equity_start_usdt: number;
   max_open_positions: number;
   cooldown_bars: number;
+  stop_loss_pct: number;
   max_daily_drawdown_pct: number;
   max_consecutive_losses: number;
   poll_interval_ms: number;
@@ -36,9 +39,11 @@ type SymbolDraft = {
   id?: string;
   symbol: string;
   active: boolean;
-  exchange: 'bybit' | 'binance';
+  exchange: 'bybit' | 'binance' | 'okx';
   exchangeTimeoutMs: number;
   exchangeRateLimitMs: number;
+  positionBroker: 'bybit' | 'okx';
+  counterPositionBroker: 'bybit' | 'okx';
   timeframe: '5m' | '15m';
   dryRun: boolean;
   allowShort: boolean;
@@ -55,6 +60,7 @@ type SymbolDraft = {
   equityStartUsdt: number;
   maxOpenPositions: number;
   cooldownBars: number;
+  stopLossPct: number;
   maxDailyDrawdownPct: number;
   maxConsecutiveLosses: number;
   pollIntervalMs: number;
@@ -86,6 +92,8 @@ const mapApiSymbolToDraft = (symbol: ApiSymbol): SymbolDraft => ({
   exchange: symbol.exchange,
   exchangeTimeoutMs: symbol.exchange_timeout_ms,
   exchangeRateLimitMs: symbol.exchange_rate_limit_ms,
+  positionBroker: symbol.position_broker,
+  counterPositionBroker: symbol.counter_position_broker,
   timeframe: symbol.timeframe,
   dryRun: symbol.dry_run,
   allowShort: symbol.allow_short,
@@ -102,6 +110,7 @@ const mapApiSymbolToDraft = (symbol: ApiSymbol): SymbolDraft => ({
   equityStartUsdt: symbol.equity_start_usdt,
   maxOpenPositions: symbol.max_open_positions,
   cooldownBars: symbol.cooldown_bars,
+  stopLossPct: symbol.stop_loss_pct,
   maxDailyDrawdownPct: symbol.max_daily_drawdown_pct,
   maxConsecutiveLosses: symbol.max_consecutive_losses,
   pollIntervalMs: symbol.poll_interval_ms,
@@ -175,7 +184,7 @@ function SymbolEditor({
             />
           </label>
           <label className="field-stack">
-            <span>Exchange</span>
+            <span>Market Data Exchange</span>
             <select
               className="input"
               value={draft.exchange}
@@ -187,7 +196,40 @@ function SymbolEditor({
               }
             >
               <option value="bybit">Bybit</option>
-              <option value="binance">Binance</option>
+              <option value="okx">OKX</option>
+              <option value="binance">Binance (legacy)</option>
+            </select>
+          </label>
+          <label className="field-stack">
+            <span>Position Broker</span>
+            <select
+              className="input"
+              value={draft.positionBroker}
+              onChange={(event) =>
+                onChange(
+                  'positionBroker',
+                  event.target.value as SymbolDraft['positionBroker']
+                )
+              }
+            >
+              <option value="bybit">Bybit</option>
+              <option value="okx">OKX</option>
+            </select>
+          </label>
+          <label className="field-stack">
+            <span>Counter Position Broker</span>
+            <select
+              className="input"
+              value={draft.counterPositionBroker}
+              onChange={(event) =>
+                onChange(
+                  'counterPositionBroker',
+                  event.target.value as SymbolDraft['counterPositionBroker']
+                )
+              }
+            >
+              <option value="bybit">Bybit</option>
+              <option value="okx">OKX</option>
             </select>
           </label>
           <label className="field-stack">
@@ -446,6 +488,19 @@ function SymbolEditor({
               value={draft.cooldownBars}
               onChange={(event) =>
                 onChange('cooldownBars', Number(event.target.value))
+              }
+            />
+          </label>
+          <label className="field-stack">
+            <span>Stop Loss %</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="any"
+              value={draft.stopLossPct}
+              onChange={(event) =>
+                onChange('stopLossPct', Number(event.target.value))
               }
             />
           </label>

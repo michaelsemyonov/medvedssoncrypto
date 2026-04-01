@@ -29,18 +29,22 @@ const SIGNAL_CHART_CANDLE_COUNT = 12;
 const POSITION_CHART_CANDLE_COUNT = 24;
 const POSITION_CHART_TIMEFRAME: Timeframe = '15m';
 const DASHBOARD_TIME_ZONE = 'Europe/Stockholm';
+const marketDataExchangeSchema = z.enum(['bybit', 'binance', 'okx']);
+const brokerSchema = z.enum(['bybit', 'okx']);
 
 const symbolUpdateSchema = z.object({
-  exchange: z.enum(['bybit', 'binance']).default('bybit'),
+  exchange: marketDataExchangeSchema.default('bybit'),
   symbols: z.array(z.string().min(1)).default([]),
 });
 
 const symbolSettingsSchema = z.object({
   symbol: z.string().min(1),
   active: z.boolean().default(true),
-  exchange: z.enum(['bybit', 'binance']),
+  exchange: marketDataExchangeSchema,
   exchangeTimeoutMs: z.coerce.number().int().min(1),
   exchangeRateLimitMs: z.coerce.number().int().min(0),
+  positionBroker: brokerSchema,
+  counterPositionBroker: brokerSchema,
   timeframe: z.enum(['5m', '15m']),
   dryRun: z.boolean(),
   allowShort: z.boolean(),
@@ -57,6 +61,7 @@ const symbolSettingsSchema = z.object({
   equityStartUsdt: z.coerce.number().min(0),
   maxOpenPositions: z.coerce.number().int().min(1),
   cooldownBars: z.coerce.number().int().min(0),
+  stopLossPct: z.coerce.number().min(0),
   maxDailyDrawdownPct: z.coerce.number().min(0),
   maxConsecutiveLosses: z.coerce.number().int().min(0),
   pollIntervalMs: z.coerce.number().int().min(100),
@@ -107,6 +112,8 @@ const toSymbolWriteModel = (input: z.infer<typeof symbolSettingsSchema>) => ({
   exchange: input.exchange,
   exchangeTimeoutMs: input.exchangeTimeoutMs,
   exchangeRateLimitMs: input.exchangeRateLimitMs,
+  positionBroker: input.positionBroker,
+  counterPositionBroker: input.counterPositionBroker,
   timeframe: input.timeframe,
   dryRun: input.dryRun,
   allowShort: input.allowShort,
@@ -128,6 +135,7 @@ const toSymbolWriteModel = (input: z.infer<typeof symbolSettingsSchema>) => ({
   },
   maxOpenPositions: input.maxOpenPositions,
   cooldownBars: input.cooldownBars,
+  stopLossPct: input.stopLossPct,
   maxDailyDrawdownPct: input.maxDailyDrawdownPct,
   maxConsecutiveLosses: input.maxConsecutiveLosses,
   pollIntervalMs: input.pollIntervalMs,
