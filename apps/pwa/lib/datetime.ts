@@ -27,6 +27,16 @@ export function formatDateTime(value: unknown, fallback = 'n/a'): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+export function formatTime(value: unknown, fallback = 'n/a'): string {
+  const date = toDate(value);
+
+  if (!date) {
+    return typeof value === 'string' && value.length > 0 ? value : fallback;
+  }
+
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function formatDurationBetween(
   start: unknown,
   end: unknown,

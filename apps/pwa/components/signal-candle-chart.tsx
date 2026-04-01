@@ -1,3 +1,5 @@
+import { formatTime } from '@/lib/datetime.ts';
+
 type CandlePoint = {
   close: number;
   closeTime: string;
@@ -60,10 +62,8 @@ export function SignalCandleChart({ candles }: { candles: CandlePoint[] }) {
     CHART_PADDING.top + ((maxPrice - price) / priceRange) * innerHeight;
 
   const lastCandle = candles.at(-1)!;
-  const firstLabel = new Date(candles[0]!.closeTime)
-    .toISOString()
-    .slice(11, 16);
-  const lastLabel = new Date(lastCandle.closeTime).toISOString().slice(11, 16);
+  const firstLabel = formatTime(candles[0]!.closeTime);
+  const lastLabel = formatTime(lastCandle.closeTime);
 
   return (
     <div className="signal-chart">
