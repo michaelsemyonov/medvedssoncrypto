@@ -20,8 +20,8 @@ MedvedssonCrypto is implemented as a modular monolith:
 2. Candles are normalized and optionally persisted into `market_candles`.
 3. Any pending dry-run orders scheduled for the new candle open are filled first.
 4. The strategy evaluates the newly closed candle with warm-up history.
-5. A signal row is written for every candle, including `NO_SIGNAL`.
-6. Risk checks approve or reject the signal, and the decision is persisted to `risk_events`.
+5. `NO_SIGNAL` outcomes advance per-run symbol progress but are not stored in `signals`.
+6. Actionable signals are written to `signals`, then risk checks approve or reject them into `risk_events`.
 7. Approved actionable signals create `PENDING` simulated orders for the next candle open.
 8. Equity snapshots are updated after processing.
 9. Notifications are sent to matching push subscribers.
@@ -30,7 +30,8 @@ MedvedssonCrypto is implemented as a modular monolith:
 
 Restart safety is enforced through database state:
 
-- `signals.idempotency_key` prevents duplicate candle decisions
+- `run_symbol_progress` tracks the latest processed candle per `(strategy_run_id, symbol_id)`
+- `signals.idempotency_key` prevents duplicate actionable signal writes
 - `simulated_orders(signal_id, intent)` prevents duplicate dry-run order creation
 - open positions are constrained to one active position per `(strategy_run_id, symbol_id)`
 - pending next-open orders are only fillable once because status transitions from `PENDING` to `FILLED`

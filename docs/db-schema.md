@@ -5,7 +5,8 @@
 - `strategy_runs`: strategy sessions and dry-run lifecycle
 - `symbols`: tracked exchange symbols and active flags
 - `market_candles`: optional persisted OHLCV for audit and replay
-- `signals`: every decision outcome, including `NO_SIGNAL`
+- `run_symbol_progress`: last processed candle per run and symbol
+- `signals`: persisted actionable signals only
 - `risk_events`: approval and rejection trail for each signal
 - `positions`: dry-run open and closed positions
 - `simulated_orders`: pending and filled virtual order journal

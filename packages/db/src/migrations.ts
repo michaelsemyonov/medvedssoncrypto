@@ -163,6 +163,21 @@ export const MIGRATIONS: Array<{ id: string; sql: string }> = [
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
         UNIQUE KEY push_subscriptions_endpoint_unique (endpoint)
       );
-    `
-  }
+    `,
+  },
+  {
+    id: '002_run_symbol_progress',
+    sql: `
+      CREATE TABLE IF NOT EXISTS run_symbol_progress (
+        strategy_run_id VARCHAR(36) NOT NULL,
+        symbol_id VARCHAR(36) NOT NULL,
+        last_processed_close_time DATETIME(3) NOT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (strategy_run_id, symbol_id),
+        CONSTRAINT fk_run_symbol_progress_run FOREIGN KEY (strategy_run_id) REFERENCES strategy_runs(id),
+        CONSTRAINT fk_run_symbol_progress_symbol FOREIGN KEY (symbol_id) REFERENCES symbols(id)
+      );
+    `,
+  },
 ];

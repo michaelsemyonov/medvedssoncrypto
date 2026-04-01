@@ -1,7 +1,10 @@
 import { createDatabase } from '@medvedsson/db';
 import { DryRunExecutionAdapter, evaluateRisk } from '@medvedsson/execution';
-import { loadConfig, timeframeToMs } from '@medvedsson/shared';
-import { evaluateMomentumStrategy, requiredCandles } from '@medvedsson/strategy';
+import { loadConfig, SIGNAL_TYPES, timeframeToMs } from '@medvedsson/shared';
+import {
+  evaluateMomentumStrategy,
+  requiredCandles,
+} from '@medvedsson/strategy';
 
 const parseArgs = () => {
   const args = new Map(
@@ -22,7 +25,9 @@ const parseArgs = () => {
   return {
     start,
     end,
-    symbols: symbols ? symbols.split(',').map((symbol) => symbol.trim().toUpperCase()) : null
+    symbols: symbols
+      ? symbols.split(',').map((symbol) => symbol.trim().toUpperCase())
+      : null,
   };
 };
 
@@ -39,7 +44,7 @@ const main = async () => {
     name: `replay-${args.start}-${args.end}`,
     strategyKey: config.strategyKey,
     version: config.strategyVersion,
-    timeframe: config.timeframe
+    timeframe: config.timeframe,
   });
   const executionAdapter = new DryRunExecutionAdapter(db, config.execution);
 
@@ -49,7 +54,7 @@ const main = async () => {
       symbol: symbol.symbol,
       timeframe: config.timeframe,
       startTime: args.start,
-      endTime: args.end
+      endTime: args.end,
     });
 
     for (let index = 0; index < candles.length; index += 1) {
@@ -60,28 +65,52 @@ const main = async () => {
         runId: run.id,
         symbolId: symbol.id,
         openPrice: candle.open,
-        openTime: candle.openTime
+        openTime: candle.openTime,
       });
 
       const openPosition = await db.getOpenPosition(run.id, symbol.id);
-      const signal = evaluateMomentumStrategy(history, config.signal, openPosition);
+      const signal = evaluateMomentumStrategy(
+        history,
+        config.signal,
+        openPosition
+      );
+
+      if (signal.signalType === SIGNAL_TYPES.NO_SIGNAL) {
+        await db.recordProcessedCandle({
+          runId: run.id,
+          symbolId: symbol.id,
+          candleCloseTime: signal.candleCloseTime,
+        });
+        continue;
+      }
+
       const signalRow = await db.insertSignal({
         runId: run.id,
         symbolId: symbol.id,
         exchange: symbol.exchange,
         symbol: symbol.symbol,
         timeframe: config.timeframe,
-        signal
+        signal,
       });
-      const lastClosedPosition = await db.getLastClosedPosition(run.id, symbol.id);
+      await db.recordProcessedCandle({
+        runId: run.id,
+        symbolId: symbol.id,
+        candleCloseTime: signal.candleCloseTime,
+      });
+      const lastClosedPosition = await db.getLastClosedPosition(
+        run.id,
+        symbol.id
+      );
       const cooldownRemainingBars =
-        lastClosedPosition?.exit_time === null || lastClosedPosition?.exit_time === undefined
+        lastClosedPosition?.exit_time === null ||
+        lastClosedPosition?.exit_time === undefined
           ? 0
           : Math.max(
               0,
               config.cooldownBars -
                 Math.floor(
-                  (new Date(candle.closeTime).getTime() - lastClosedPosition.exit_time.getTime()) /
+                  (new Date(candle.closeTime).getTime() -
+                    lastClosedPosition.exit_time.getTime()) /
                     timeframeToMs(config.timeframe)
                 )
             );
@@ -98,7 +127,7 @@ const main = async () => {
         currentDrawdownPct: await db.getCurrentDrawdownPct(run.id),
         maxDailyDrawdownPct: config.maxDailyDrawdownPct,
         consecutiveLosses: await db.getConsecutiveLosses(run.id),
-        maxConsecutiveLosses: config.maxConsecutiveLosses
+        maxConsecutiveLosses: config.maxConsecutiveLosses,
       });
 
       await db.updateSignalDecision(signalRow.id, decision);
@@ -106,10 +135,10 @@ const main = async () => {
         runId: run.id,
         signalId: signalRow.id,
         symbolId: symbol.id,
-        decision
+        decision,
       });
 
-      if (decision.approved && signal.signalType !== 'NO_SIGNAL') {
+      if (decision.approved) {
         await executionAdapter.handleApprovedSignal({
           runId: run.id,
           signalId: signalRow.id,
@@ -117,13 +146,16 @@ const main = async () => {
           signalType: signal.signalType,
           referencePrice: candle.close,
           scheduledForOpenTime: candle.closeTime,
-          openPosition
+          openPosition,
         });
       }
     }
   }
 
-  const stats = await db.getStatsSummary(run.id, config.execution.equityStartUsdt);
+  const stats = await db.getStatsSummary(
+    run.id,
+    config.execution.equityStartUsdt
+  );
   await db.stopRun(run.id);
   await db.close();
   console.log(JSON.stringify({ runId: run.id, stats }, null, 2));

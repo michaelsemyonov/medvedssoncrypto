@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
 
-import { calculateTradePnl, calculateUnrealizedPnl } from '@medvedsson/execution';
+import {
+  calculateTradePnl,
+  calculateUnrealizedPnl,
+} from '@medvedsson/execution';
 import type {
   AppConfig,
   Candle,
   OpenPositionContext,
   PushSubscriptionRecord,
   RiskDecision,
-  StrategySignal
+  StrategySignal,
 } from '@medvedsson/shared';
-import { round } from '@medvedsson/shared';
+import { round, SIGNAL_TYPES } from '@medvedsson/shared';
 
 type RunRow = {
   id: string;
@@ -112,6 +115,14 @@ type EquitySnapshot = {
   open_positions: number;
 };
 
+type RunSymbolProgressRow = {
+  strategy_run_id: string;
+  symbol_id: string;
+  last_processed_close_time: Date;
+  created_at: Date;
+  updated_at: Date;
+};
+
 type PushSubscriptionRow = PushSubscriptionRecord & {
   id: string;
   created_at: Date;
@@ -137,6 +148,7 @@ export class FakeMedvedssonDatabase {
   private positions: PositionRow[] = [];
   private simulatedOrders: SimulatedOrderRow[] = [];
   private equitySnapshots: EquitySnapshot[] = [];
+  private runSymbolProgress: RunSymbolProgressRow[] = [];
   private pushSubscriptions: PushSubscriptionRow[] = [];
 
   async migrate(): Promise<void> {}
@@ -148,7 +160,9 @@ export class FakeMedvedssonDatabase {
   }
 
   async listRuns(): Promise<RunRow[]> {
-    return [...this.runs].sort((left, right) => right.created_at.getTime() - left.created_at.getTime());
+    return [...this.runs].sort(
+      (left, right) => right.created_at.getTime() - left.created_at.getTime()
+    );
   }
 
   async createRun(params: {
@@ -174,7 +188,7 @@ export class FakeMedvedssonDatabase {
       started_at: now,
       stopped_at: null,
       created_at: now,
-      updated_at: now
+      updated_at: now,
     };
 
     this.runs.push(run);
@@ -192,7 +206,7 @@ export class FakeMedvedssonDatabase {
       name: `${config.strategyKey}-${config.strategyVersion}-${new Date().toISOString()}`,
       strategyKey: config.strategyKey,
       version: config.strategyVersion,
-      timeframe: config.timeframe
+      timeframe: config.timeframe,
     });
   }
 
@@ -206,7 +220,10 @@ export class FakeMedvedssonDatabase {
     }
   }
 
-  async replaceActiveSymbols(exchange: string, symbols: string[]): Promise<SymbolRow[]> {
+  async replaceActiveSymbols(
+    exchange: string,
+    symbols: string[]
+  ): Promise<SymbolRow[]> {
     for (const symbol of this.symbols) {
       if (symbol.exchange === exchange) {
         symbol.active = false;
@@ -218,7 +235,9 @@ export class FakeMedvedssonDatabase {
 
     for (const symbol of symbols) {
       const [baseAsset, quoteAsset] = symbol.split('/');
-      let row = this.symbols.find((item) => item.exchange === exchange && item.symbol === symbol);
+      let row = this.symbols.find(
+        (item) => item.exchange === exchange && item.symbol === symbol
+      );
 
       if (!row) {
         row = {
@@ -229,7 +248,7 @@ export class FakeMedvedssonDatabase {
           quote_asset: quoteAsset!,
           active: true,
           created_at: new Date(),
-          updated_at: new Date()
+          updated_at: new Date(),
         };
         this.symbols.push(row);
       } else {
@@ -246,11 +265,17 @@ export class FakeMedvedssonDatabase {
   }
 
   async listSymbols(): Promise<SymbolRow[]> {
-    return [...this.symbols].sort((left, right) => left.symbol.localeCompare(right.symbol));
+    return [...this.symbols].sort((left, right) =>
+      left.symbol.localeCompare(right.symbol)
+    );
   }
 
   async getSymbol(exchange: string, symbol: string): Promise<SymbolRow | null> {
-    return this.symbols.find((item) => item.exchange === exchange && item.symbol === symbol) ?? null;
+    return (
+      this.symbols.find(
+        (item) => item.exchange === exchange && item.symbol === symbol
+      ) ?? null
+    );
   }
 
   async upsertCandles(candles: Candle[]): Promise<void> {
@@ -269,9 +294,19 @@ export class FakeMedvedssonDatabase {
     }
   }
 
-  async getRecentCandles(exchange: string, symbol: string, timeframe: string, limit: number): Promise<Candle[]> {
+  async getRecentCandles(
+    exchange: string,
+    symbol: string,
+    timeframe: string,
+    limit: number
+  ): Promise<Candle[]> {
     return this.candles
-      .filter((item) => item.exchange === exchange && item.symbol === symbol && item.timeframe === timeframe)
+      .filter(
+        (item) =>
+          item.exchange === exchange &&
+          item.symbol === symbol &&
+          item.timeframe === timeframe
+      )
       .sort((left, right) => left.closeTime.localeCompare(right.closeTime))
       .slice(-limit);
   }
@@ -285,17 +320,27 @@ export class FakeMedvedssonDatabase {
   }): Promise<Candle[]> {
     return this.candles
       .filter((item) => {
-        if (item.exchange !== params.exchange || item.symbol !== params.symbol || item.timeframe !== params.timeframe) {
+        if (
+          item.exchange !== params.exchange ||
+          item.symbol !== params.symbol ||
+          item.timeframe !== params.timeframe
+        ) {
           return false;
         }
 
         const closeTimeMs = new Date(item.closeTime).getTime();
 
-        if (params.startTime && closeTimeMs < new Date(params.startTime).getTime()) {
+        if (
+          params.startTime &&
+          closeTimeMs < new Date(params.startTime).getTime()
+        ) {
           return false;
         }
 
-        if (params.endTime && closeTimeMs > new Date(params.endTime).getTime()) {
+        if (
+          params.endTime &&
+          closeTimeMs > new Date(params.endTime).getTime()
+        ) {
           return false;
         }
 
@@ -304,12 +349,55 @@ export class FakeMedvedssonDatabase {
       .sort((left, right) => left.closeTime.localeCompare(right.closeTime));
   }
 
-  async getLastProcessedCloseTime(runId: string, symbolId: string): Promise<string | null> {
+  async getLastProcessedCloseTime(
+    runId: string,
+    symbolId: string
+  ): Promise<string | null> {
+    const progress = this.runSymbolProgress.find(
+      (item) => item.strategy_run_id === runId && item.symbol_id === symbolId
+    );
+
+    if (progress) {
+      return progress.last_processed_close_time.toISOString();
+    }
+
     const row = this.signals
-      .filter((item) => item.strategy_run_id === runId && item.symbol_id === symbolId)
-      .sort((left, right) => right.candle_close_time.getTime() - left.candle_close_time.getTime())[0];
+      .filter(
+        (item) => item.strategy_run_id === runId && item.symbol_id === symbolId
+      )
+      .sort(
+        (left, right) =>
+          right.candle_close_time.getTime() - left.candle_close_time.getTime()
+      )[0];
 
     return row ? row.candle_close_time.toISOString() : null;
+  }
+
+  async recordProcessedCandle(params: {
+    runId: string;
+    symbolId: string;
+    candleCloseTime: string;
+  }): Promise<void> {
+    const existing = this.runSymbolProgress.find(
+      (item) =>
+        item.strategy_run_id === params.runId &&
+        item.symbol_id === params.symbolId
+    );
+    const closeTime = new Date(params.candleCloseTime);
+
+    if (existing) {
+      existing.last_processed_close_time = closeTime;
+      existing.updated_at = new Date();
+      return;
+    }
+
+    this.runSymbolProgress.push({
+      strategy_run_id: params.runId,
+      symbol_id: params.symbolId,
+      last_processed_close_time: closeTime,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
   }
 
   async insertSignal(params: {
@@ -320,13 +408,19 @@ export class FakeMedvedssonDatabase {
     timeframe: string;
     signal: StrategySignal;
   }): Promise<SignalRow> {
+    if (params.signal.signalType === SIGNAL_TYPES.NO_SIGNAL) {
+      throw new Error('NO_SIGNAL must not be inserted into the signals table.');
+    }
+
     const idempotencyKey = [
       params.runId,
       params.symbolId,
       params.signal.candleCloseTime,
-      params.signal.signalType
+      params.signal.signalType,
     ].join(':');
-    const existing = this.signals.find((item) => item.idempotency_key === idempotencyKey);
+    const existing = this.signals.find(
+      (item) => item.idempotency_key === idempotencyKey
+    );
 
     if (existing) {
       return existing;
@@ -349,14 +443,17 @@ export class FakeMedvedssonDatabase {
       approved: null,
       rejection_reason: null,
       idempotency_key: idempotencyKey,
-      created_at: new Date()
+      created_at: new Date(),
     };
 
     this.signals.push(row);
     return row;
   }
 
-  async updateSignalDecision(signalId: string, decision: RiskDecision): Promise<void> {
+  async updateSignalDecision(
+    signalId: string,
+    decision: RiskDecision
+  ): Promise<void> {
     const signal = this.signals.find((item) => item.id === signalId);
 
     if (signal) {
@@ -380,13 +477,19 @@ export class FakeMedvedssonDatabase {
       reason_code: params.decision.rejectionCode,
       reason_text: params.decision.rejectionReason,
       snapshot: params.decision.snapshot,
-      created_at: new Date()
+      created_at: new Date(),
     });
   }
 
-  async getOpenPosition(runId: string, symbolId: string): Promise<OpenPositionContext | null> {
+  async getOpenPosition(
+    runId: string,
+    symbolId: string
+  ): Promise<OpenPositionContext | null> {
     const row = this.positions.find(
-      (item) => item.strategy_run_id === runId && item.symbol_id === symbolId && item.status === 'OPEN'
+      (item) =>
+        item.strategy_run_id === runId &&
+        item.symbol_id === symbolId &&
+        item.status === 'OPEN'
     );
 
     if (!row) {
@@ -400,16 +503,24 @@ export class FakeMedvedssonDatabase {
       entryPrice: row.entry_price,
       qty: row.qty,
       notionalUsdt: row.notional_usdt,
-      entryFee: row.entry_fee
+      entryFee: row.entry_fee,
     };
   }
 
-  async getOpenPositions(runId: string): Promise<Array<PositionRow & { symbol: string; unrealized_pnl: number | null }>> {
+  async getOpenPositions(
+    runId: string
+  ): Promise<
+    Array<PositionRow & { symbol: string; unrealized_pnl: number | null }>
+  > {
     return Promise.all(
       this.positions
-        .filter((item) => item.strategy_run_id === runId && item.status === 'OPEN')
+        .filter(
+          (item) => item.strategy_run_id === runId && item.status === 'OPEN'
+        )
         .map(async (position) => {
-          const symbol = this.symbols.find((item) => item.id === position.symbol_id)?.symbol ?? 'UNKNOWN';
+          const symbol =
+            this.symbols.find((item) => item.id === position.symbol_id)
+              ?.symbol ?? 'UNKNOWN';
           const latestClose = await this.getLatestClose(symbol);
 
           return {
@@ -423,31 +534,49 @@ export class FakeMedvedssonDatabase {
                       side: position.side,
                       entryPrice: position.entry_price,
                       qty: position.qty,
-                      entryFee: position.entry_fee
+                      entryFee: position.entry_fee,
                     },
                     latestClose
-                  )
+                  ),
           };
         })
     );
   }
 
   async getOpenPositionsCount(runId: string): Promise<number> {
-    return this.positions.filter((item) => item.strategy_run_id === runId && item.status === 'OPEN').length;
+    return this.positions.filter(
+      (item) => item.strategy_run_id === runId && item.status === 'OPEN'
+    ).length;
   }
 
-  async getLastClosedPosition(runId: string, symbolId: string): Promise<PositionRow | null> {
+  async getLastClosedPosition(
+    runId: string,
+    symbolId: string
+  ): Promise<PositionRow | null> {
     return (
       this.positions
-        .filter((item) => item.strategy_run_id === runId && item.symbol_id === symbolId && item.status === 'CLOSED')
-        .sort((left, right) => (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0))[0] ?? null
+        .filter(
+          (item) =>
+            item.strategy_run_id === runId &&
+            item.symbol_id === symbolId &&
+            item.status === 'CLOSED'
+        )
+        .sort(
+          (left, right) =>
+            (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0)
+        )[0] ?? null
     );
   }
 
   async getConsecutiveLosses(runId: string): Promise<number> {
     const closed = this.positions
-      .filter((item) => item.strategy_run_id === runId && item.status === 'CLOSED')
-      .sort((left, right) => (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0));
+      .filter(
+        (item) => item.strategy_run_id === runId && item.status === 'CLOSED'
+      )
+      .sort(
+        (left, right) =>
+          (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0)
+      );
 
     let losses = 0;
 
@@ -467,7 +596,10 @@ export class FakeMedvedssonDatabase {
     return (
       this.equitySnapshots
         .filter((item) => item.strategy_run_id === runId)
-        .sort((left, right) => right.snapshot_time.getTime() - left.snapshot_time.getTime())[0]?.drawdown_pct ?? 0
+        .sort(
+          (left, right) =>
+            right.snapshot_time.getTime() - left.snapshot_time.getTime()
+        )[0]?.drawdown_pct ?? 0
     );
   }
 
@@ -502,7 +634,8 @@ export class FakeMedvedssonDatabase {
     meta: Record<string, unknown>;
   }): Promise<SimulatedOrderRow | null> {
     const existing = this.simulatedOrders.find(
-      (item) => item.signal_id === params.signalId && item.intent === params.intent
+      (item) =>
+        item.signal_id === params.signalId && item.intent === params.intent
     );
 
     if (existing) {
@@ -528,14 +661,18 @@ export class FakeMedvedssonDatabase {
       fill_model: params.fillModel,
       status: 'PENDING',
       meta: params.meta,
-      created_at: new Date()
+      created_at: new Date(),
     };
 
     this.simulatedOrders.push(order);
     return order;
   }
 
-  async getPendingOrdersForOpenTime(runId: string, symbolId: string, openTime: string): Promise<SimulatedOrderRow[]> {
+  async getPendingOrdersForOpenTime(
+    runId: string,
+    symbolId: string,
+    openTime: string
+  ): Promise<SimulatedOrderRow[]> {
     return this.simulatedOrders.filter(
       (item) =>
         item.strategy_run_id === runId &&
@@ -545,7 +682,11 @@ export class FakeMedvedssonDatabase {
     );
   }
 
-  async fillPendingOrder(orderId: string, fillPrice: number, fillTime: string): Promise<void> {
+  async fillPendingOrder(
+    orderId: string,
+    fillPrice: number,
+    fillTime: string
+  ): Promise<void> {
     const order = this.simulatedOrders.find((item) => item.id === orderId);
 
     if (!order || order.status !== 'PENDING') {
@@ -574,7 +715,7 @@ export class FakeMedvedssonDatabase {
         opened_by_signal_id: order.signal_id,
         closed_by_signal_id: null,
         created_at: new Date(),
-        updated_at: new Date()
+        updated_at: new Date(),
       });
       return;
     }
@@ -620,7 +761,9 @@ export class FakeMedvedssonDatabase {
   }): Promise<void> {
     const peak = Math.max(
       params.equityUsdt,
-      ...this.equitySnapshots.filter((item) => item.strategy_run_id === params.runId).map((item) => item.equity_usdt)
+      ...this.equitySnapshots
+        .filter((item) => item.strategy_run_id === params.runId)
+        .map((item) => item.equity_usdt)
     );
 
     this.equitySnapshots.push({
@@ -631,66 +774,102 @@ export class FakeMedvedssonDatabase {
       equity_usdt: params.equityUsdt,
       unrealized_pnl: params.unrealizedPnl,
       realized_pnl_cum: params.realizedPnlCum,
-      drawdown_pct: peak === 0 ? 0 : round(((peak - params.equityUsdt) / peak) * 100, 8),
-      open_positions: params.openPositions
+      drawdown_pct:
+        peak === 0 ? 0 : round(((peak - params.equityUsdt) / peak) * 100, 8),
+      open_positions: params.openPositions,
     });
   }
 
   async getRealizedPnlCum(runId: string): Promise<number> {
     return this.positions
-      .filter((item) => item.strategy_run_id === runId && item.status === 'CLOSED')
+      .filter(
+        (item) => item.strategy_run_id === runId && item.status === 'CLOSED'
+      )
       .reduce((sum, item) => sum + (item.realized_pnl ?? 0), 0);
   }
 
   async getRecentSignals(limit = 100): Promise<SignalRow[]> {
     return [...this.signals]
-      .sort((left, right) => right.candle_close_time.getTime() - left.candle_close_time.getTime())
+      .sort(
+        (left, right) =>
+          right.candle_close_time.getTime() - left.candle_close_time.getTime()
+      )
       .slice(0, limit);
   }
 
-  async getRecentTrades(limit = 100): Promise<Array<PositionRow & { symbol: string }>> {
+  async getRecentTrades(
+    limit = 100
+  ): Promise<Array<PositionRow & { symbol: string }>> {
     return this.positions
       .filter((item) => item.status === 'CLOSED')
-      .sort((left, right) => (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0))
+      .sort(
+        (left, right) =>
+          (right.exit_time?.getTime() ?? 0) - (left.exit_time?.getTime() ?? 0)
+      )
       .slice(0, limit)
       .map((position) => ({
         ...position,
-        symbol: this.symbols.find((item) => item.id === position.symbol_id)?.symbol ?? 'UNKNOWN'
+        symbol:
+          this.symbols.find((item) => item.id === position.symbol_id)?.symbol ??
+          'UNKNOWN',
       }));
   }
 
-  async getStatsSummary(runId: string, startingEquity: number): Promise<Record<string, number>> {
+  async getStatsSummary(
+    runId: string,
+    startingEquity: number
+  ): Promise<Record<string, number>> {
     const closedTrades = this.positions.filter(
       (item) => item.strategy_run_id === runId && item.status === 'CLOSED'
     );
-    const wins = closedTrades.filter((item) => (item.realized_pnl ?? 0) > 0).length;
-    const totalRealized = closedTrades.reduce((sum, item) => sum + (item.realized_pnl ?? 0), 0);
+    const wins = closedTrades.filter(
+      (item) => (item.realized_pnl ?? 0) > 0
+    ).length;
+    const totalRealized = closedTrades.reduce(
+      (sum, item) => sum + (item.realized_pnl ?? 0),
+      0
+    );
     const maxDrawdown = Math.max(
       0,
-      ...this.equitySnapshots.filter((item) => item.strategy_run_id === runId).map((item) => item.drawdown_pct)
+      ...this.equitySnapshots
+        .filter((item) => item.strategy_run_id === runId)
+        .map((item) => item.drawdown_pct)
     );
 
     return {
       closedTrades: closedTrades.length,
-      winRate: closedTrades.length === 0 ? 0 : round((wins / closedTrades.length) * 100, 4),
+      winRate:
+        closedTrades.length === 0
+          ? 0
+          : round((wins / closedTrades.length) * 100, 4),
       averageTradeReturn:
         closedTrades.length === 0
           ? 0
           : closedTrades.reduce(
-              (sum, item) => sum + (item.realized_pnl ?? 0) / Math.max(item.notional_usdt, 1),
+              (sum, item) =>
+                sum +
+                (item.realized_pnl ?? 0) / Math.max(item.notional_usdt, 1),
               0
             ) / closedTrades.length,
       totalRealizedPnl: totalRealized,
       equity: round(startingEquity + totalRealized, 8),
-      maxDrawdownPct: maxDrawdown
+      maxDrawdownPct: maxDrawdown,
     };
   }
 
-  async getLatestSignalsBySymbol(): Promise<Array<{ symbol: string; signal_type: string; candle_close_time: Date; approved: boolean | null }>> {
+  async getLatestSignalsBySymbol(): Promise<
+    Array<{
+      symbol: string;
+      signal_type: string;
+      candle_close_time: Date;
+      approved: boolean | null;
+    }>
+  > {
     const latestBySymbol = new Map<string, SignalRow>();
 
     for (const signal of [...this.signals].sort(
-      (left, right) => right.candle_close_time.getTime() - left.candle_close_time.getTime()
+      (left, right) =>
+        right.candle_close_time.getTime() - left.candle_close_time.getTime()
     )) {
       if (!latestBySymbol.has(signal.symbol)) {
         latestBySymbol.set(signal.symbol, signal);
@@ -701,12 +880,16 @@ export class FakeMedvedssonDatabase {
       symbol: signal.symbol,
       signal_type: signal.signal_type,
       candle_close_time: signal.candle_close_time,
-      approved: signal.approved
+      approved: signal.approved,
     }));
   }
 
-  async upsertPushSubscription(subscription: PushSubscriptionRecord): Promise<void> {
-    const existing = this.pushSubscriptions.find((item) => item.endpoint === subscription.endpoint);
+  async upsertPushSubscription(
+    subscription: PushSubscriptionRecord
+  ): Promise<void> {
+    const existing = this.pushSubscriptions.find(
+      (item) => item.endpoint === subscription.endpoint
+    );
 
     if (existing) {
       existing.userLabel = subscription.userLabel;
@@ -723,12 +906,14 @@ export class FakeMedvedssonDatabase {
       id: randomUUID(),
       ...subscription,
       created_at: new Date(),
-      updated_at: new Date()
+      updated_at: new Date(),
     });
   }
 
   async disablePushSubscription(endpoint: string): Promise<void> {
-    const subscription = this.pushSubscriptions.find((item) => item.endpoint === endpoint);
+    const subscription = this.pushSubscriptions.find(
+      (item) => item.endpoint === endpoint
+    );
 
     if (subscription) {
       subscription.enabled = false;
@@ -736,7 +921,10 @@ export class FakeMedvedssonDatabase {
     }
   }
 
-  async getPushSubscriptionsForEvent(symbol: string, eventType: string): Promise<PushSubscriptionRow[]> {
+  async getPushSubscriptionsForEvent(
+    symbol: string,
+    eventType: string
+  ): Promise<PushSubscriptionRow[]> {
     return this.pushSubscriptions.filter((subscription) => {
       const symbolMatch =
         subscription.symbolFilters === null ||
@@ -766,7 +954,9 @@ export class FakeMedvedssonDatabase {
     let total = 0;
 
     for (const position of openPositions) {
-      const symbol = this.symbols.find((item) => item.id === position.symbol_id)?.symbol;
+      const symbol = this.symbols.find(
+        (item) => item.id === position.symbol_id
+      )?.symbol;
 
       if (!symbol) {
         continue;
@@ -783,7 +973,7 @@ export class FakeMedvedssonDatabase {
           side: position.side,
           entryPrice: position.entry_price,
           qty: position.qty,
-          entryFee: position.entry_fee
+          entryFee: position.entry_fee,
         },
         latestClose
       );
@@ -793,4 +983,5 @@ export class FakeMedvedssonDatabase {
   }
 }
 
-export const createFakeDatabase = (): FakeMedvedssonDatabase => new FakeMedvedssonDatabase();
+export const createFakeDatabase = (): FakeMedvedssonDatabase =>
+  new FakeMedvedssonDatabase();

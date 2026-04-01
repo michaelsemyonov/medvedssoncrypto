@@ -1,16 +1,24 @@
 import { randomUUID } from 'node:crypto';
 
 import { calculateTradePnl } from '@medvedsson/execution';
-import { adjustForSlippage, calculateUnrealizedPnl } from '@medvedsson/execution';
+import {
+  adjustForSlippage,
+  calculateUnrealizedPnl,
+} from '@medvedsson/execution';
 import type {
   AppConfig,
   Candle,
   OpenPositionContext,
   PushSubscriptionRecord,
   RiskDecision,
-  StrategySignal
+  StrategySignal,
 } from '@medvedsson/shared';
-import { normalizeSymbol, round, utcDateKey } from '@medvedsson/shared';
+import {
+  normalizeSymbol,
+  round,
+  SIGNAL_TYPES,
+  utcDateKey,
+} from '@medvedsson/shared';
 import mysql from 'mysql2/promise';
 
 import { MIGRATIONS } from './migrations.ts';
@@ -181,7 +189,11 @@ const query = async <TRow extends MysqlRow>(
   return rows;
 };
 
-const execute = async (db: Queryable, text: string, params: unknown[] = []): Promise<MysqlResult> => {
+const execute = async (
+  db: Queryable,
+  text: string,
+  params: unknown[] = []
+): Promise<MysqlResult> => {
   const [result] = await db.execute<MysqlResult>(text, params as never);
   return result;
 };
@@ -217,7 +229,7 @@ const normalizeRunRow = (row: MysqlRow): RunRow => ({
   started_at: parseDate(row.started_at)!,
   stopped_at: parseDate(row.stopped_at),
   created_at: parseDate(row.created_at)!,
-  updated_at: parseDate(row.updated_at)!
+  updated_at: parseDate(row.updated_at)!,
 });
 
 const normalizeSymbolRow = (row: MysqlRow): SymbolRow => ({
@@ -228,7 +240,7 @@ const normalizeSymbolRow = (row: MysqlRow): SymbolRow => ({
   quote_asset: String(row.quote_asset),
   active: parseBoolean(row.active),
   created_at: parseDate(row.created_at)!,
-  updated_at: parseDate(row.updated_at)!
+  updated_at: parseDate(row.updated_at)!,
 });
 
 const normalizeSignalRow = (row: MysqlRow): SignalRow => ({
@@ -240,15 +252,20 @@ const normalizeSignalRow = (row: MysqlRow): SignalRow => ({
   timeframe: String(row.timeframe),
   candle_close_time: parseDate(row.candle_close_time)!,
   signal_type: String(row.signal_type),
-  signal_strength: row.signal_strength === null ? null : Number(row.signal_strength),
+  signal_strength:
+    row.signal_strength === null ? null : Number(row.signal_strength),
   formula_inputs: parseJson<Record<string, unknown>>(row.formula_inputs),
   indicators: parseJson<Record<string, unknown>>(row.indicators),
   features: parseJson<Record<string, unknown>>(row.features),
   reason: String(row.reason),
-  approved: row.approved === null || row.approved === undefined ? null : parseBoolean(row.approved),
-  rejection_reason: row.rejection_reason === null ? null : String(row.rejection_reason),
+  approved:
+    row.approved === null || row.approved === undefined
+      ? null
+      : parseBoolean(row.approved),
+  rejection_reason:
+    row.rejection_reason === null ? null : String(row.rejection_reason),
   idempotency_key: String(row.idempotency_key),
-  created_at: parseDate(row.created_at)!
+  created_at: parseDate(row.created_at)!,
 });
 
 const normalizePositionRow = (row: MysqlRow): PositionRow => ({
@@ -267,10 +284,14 @@ const normalizePositionRow = (row: MysqlRow): PositionRow => ({
   exit_fee: row.exit_fee === null ? null : Number(row.exit_fee),
   realized_pnl: row.realized_pnl === null ? null : Number(row.realized_pnl),
   opened_by_signal_id: String(row.opened_by_signal_id),
-  closed_by_signal_id: row.closed_by_signal_id === null ? null : String(row.closed_by_signal_id),
+  closed_by_signal_id:
+    row.closed_by_signal_id === null ? null : String(row.closed_by_signal_id),
   created_at: parseDate(row.created_at)!,
   updated_at: parseDate(row.updated_at)!,
-  open_slot: row.open_slot === null || row.open_slot === undefined ? null : String(row.open_slot)
+  open_slot:
+    row.open_slot === null || row.open_slot === undefined
+      ? null
+      : String(row.open_slot),
 });
 
 const normalizeSimulatedOrderRow = (row: MysqlRow): SimulatedOrderRow => ({
@@ -292,7 +313,7 @@ const normalizeSimulatedOrderRow = (row: MysqlRow): SimulatedOrderRow => ({
   fill_model: String(row.fill_model),
   status: String(row.status) as SimulatedOrderRow['status'],
   meta: parseJson<Record<string, unknown>>(row.meta),
-  created_at: parseDate(row.created_at)!
+  created_at: parseDate(row.created_at)!,
 });
 
 const normalizePushSubscriptionRow = (row: MysqlRow): PushSubscriptionRow => ({
@@ -303,11 +324,13 @@ const normalizePushSubscriptionRow = (row: MysqlRow): PushSubscriptionRow => ({
   auth: String(row.auth),
   enabled: parseBoolean(row.enabled),
   symbol_filters:
-    row.symbol_filters === null ? null : parseJson<string[]>(row.symbol_filters),
+    row.symbol_filters === null
+      ? null
+      : parseJson<string[]>(row.symbol_filters),
   event_filters:
     row.event_filters === null ? null : parseJson<string[]>(row.event_filters),
   created_at: parseDate(row.created_at)!,
-  updated_at: parseDate(row.updated_at)!
+  updated_at: parseDate(row.updated_at)!,
 });
 
 export const createPool = (connectionString: string): DbPoolLike =>
@@ -317,7 +340,7 @@ export const createPool = (connectionString: string): DbPoolLike =>
     timezone: 'Z',
     multipleStatements: true,
     decimalNumbers: true,
-    dateStrings: true
+    dateStrings: true,
   });
 
 export class MedvedssonDatabase {
@@ -349,7 +372,9 @@ export class MedvedssonDatabase {
 
       await withTransaction(this.pool, async (client) => {
         await client.query(migration.sql);
-        await execute(client, 'INSERT INTO schema_migrations (id) VALUES (?)', [migration.id]);
+        await execute(client, 'INSERT INTO schema_migrations (id) VALUES (?)', [
+          migration.id,
+        ]);
       });
     }
   }
@@ -413,11 +438,15 @@ export class MedvedssonDatabase {
         params.status ?? 'RUNNING',
         params.dryRun ?? true,
         params.baseCurrency ?? 'USDT',
-        toMysqlDateTime(now)
+        toMysqlDateTime(now),
       ]
     );
 
-    const rows = await query<MysqlRow>(this.pool, 'SELECT * FROM strategy_runs WHERE id = ? LIMIT 1', [id]);
+    const rows = await query<MysqlRow>(
+      this.pool,
+      'SELECT * FROM strategy_runs WHERE id = ? LIMIT 1',
+      [id]
+    );
     return normalizeRunRow(rows[0]!);
   }
 
@@ -432,7 +461,7 @@ export class MedvedssonDatabase {
       name: `${config.strategyKey}-${config.strategyVersion}-${new Date().toISOString()}`,
       strategyKey: config.strategyKey,
       version: config.strategyVersion,
-      timeframe: config.timeframe
+      timeframe: config.timeframe,
     });
   }
 
@@ -446,7 +475,10 @@ export class MedvedssonDatabase {
     );
   }
 
-  async replaceActiveSymbols(exchange: string, symbols: string[]): Promise<SymbolRow[]> {
+  async replaceActiveSymbols(
+    exchange: string,
+    symbols: string[]
+  ): Promise<SymbolRow[]> {
     await execute(
       this.pool,
       `UPDATE symbols SET active = FALSE, updated_at = CURRENT_TIMESTAMP(3) WHERE exchange = ?`,
@@ -482,7 +514,10 @@ export class MedvedssonDatabase {
   }
 
   async listSymbols(): Promise<SymbolRow[]> {
-    const rows = await query<MysqlRow>(this.pool, 'SELECT * FROM symbols ORDER BY symbol ASC');
+    const rows = await query<MysqlRow>(
+      this.pool,
+      'SELECT * FROM symbols ORDER BY symbol ASC'
+    );
     return rows.map(normalizeSymbolRow);
   }
 
@@ -516,13 +551,18 @@ export class MedvedssonDatabase {
           candle.low,
           candle.close,
           candle.volume,
-          candle.source
+          candle.source,
         ]
       );
     }
   }
 
-  async getRecentCandles(exchange: string, symbol: string, timeframe: string, limit: number): Promise<Candle[]> {
+  async getRecentCandles(
+    exchange: string,
+    symbol: string,
+    timeframe: string,
+    limit: number
+  ): Promise<Candle[]> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT exchange, symbol, timeframe, open_time, close_time, open, high, low, close, volume, source
@@ -544,7 +584,7 @@ export class MedvedssonDatabase {
       low: Number(row.low),
       close: Number(row.close),
       volume: Number(row.volume),
-      source: String(row.source)
+      source: String(row.source),
     }));
   }
 
@@ -556,7 +596,11 @@ export class MedvedssonDatabase {
     endTime?: string | null;
   }): Promise<Candle[]> {
     const clauses = ['exchange = ?', 'symbol = ?', 'timeframe = ?'];
-    const values: unknown[] = [params.exchange, normalizeSymbol(params.symbol), params.timeframe];
+    const values: unknown[] = [
+      params.exchange,
+      normalizeSymbol(params.symbol),
+      params.timeframe,
+    ];
 
     if (params.startTime) {
       clauses.push('close_time >= ?');
@@ -588,12 +632,28 @@ export class MedvedssonDatabase {
       low: Number(row.low),
       close: Number(row.close),
       volume: Number(row.volume),
-      source: String(row.source)
+      source: String(row.source),
     }));
   }
 
-  async getLastProcessedCloseTime(runId: string, symbolId: string): Promise<string | null> {
+  async getLastProcessedCloseTime(
+    runId: string,
+    symbolId: string
+  ): Promise<string | null> {
     const rows = await query<MysqlRow>(
+      this.pool,
+      `SELECT last_processed_close_time
+       FROM run_symbol_progress
+       WHERE strategy_run_id = ? AND symbol_id = ?
+       LIMIT 1`,
+      [runId, symbolId]
+    );
+
+    if (rows[0]) {
+      return parseDate(rows[0].last_processed_close_time)!.toISOString();
+    }
+
+    const legacyRows = await query<MysqlRow>(
       this.pool,
       `SELECT candle_close_time
        FROM signals
@@ -603,7 +663,29 @@ export class MedvedssonDatabase {
       [runId, symbolId]
     );
 
-    return rows[0] ? parseDate(rows[0].candle_close_time)!.toISOString() : null;
+    return legacyRows[0]
+      ? parseDate(legacyRows[0].candle_close_time)!.toISOString()
+      : null;
+  }
+
+  async recordProcessedCandle(params: {
+    runId: string;
+    symbolId: string;
+    candleCloseTime: string;
+  }): Promise<void> {
+    await execute(
+      this.pool,
+      `INSERT INTO run_symbol_progress (
+         strategy_run_id,
+         symbol_id,
+         last_processed_close_time
+       )
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         last_processed_close_time = VALUES(last_processed_close_time),
+         updated_at = CURRENT_TIMESTAMP(3)`,
+      [params.runId, params.symbolId, toMysqlDateTime(params.candleCloseTime)]
+    );
   }
 
   async insertSignal(params: {
@@ -614,11 +696,15 @@ export class MedvedssonDatabase {
     timeframe: string;
     signal: StrategySignal;
   }): Promise<SignalRow> {
+    if (params.signal.signalType === SIGNAL_TYPES.NO_SIGNAL) {
+      throw new Error('NO_SIGNAL must not be inserted into the signals table.');
+    }
+
     const idempotencyKey = [
       params.runId,
       params.symbolId,
       params.signal.candleCloseTime,
-      params.signal.signalType
+      params.signal.signalType,
     ].join(':');
     const signalId = randomUUID();
 
@@ -657,7 +743,7 @@ export class MedvedssonDatabase {
         JSON.stringify(params.signal.indicators),
         JSON.stringify(params.signal.features),
         params.signal.reason,
-        idempotencyKey
+        idempotencyKey,
       ]
     );
 
@@ -670,7 +756,10 @@ export class MedvedssonDatabase {
     return normalizeSignalRow(rows[0]!);
   }
 
-  async updateSignalDecision(signalId: string, decision: RiskDecision): Promise<void> {
+  async updateSignalDecision(
+    signalId: string,
+    decision: RiskDecision
+  ): Promise<void> {
     await execute(
       this.pool,
       `UPDATE signals
@@ -700,12 +789,15 @@ export class MedvedssonDatabase {
         params.decision.approved,
         params.decision.rejectionCode,
         params.decision.rejectionReason,
-        JSON.stringify(params.decision.snapshot)
+        JSON.stringify(params.decision.snapshot),
       ]
     );
   }
 
-  async getOpenPosition(runId: string, symbolId: string): Promise<OpenPositionContext | null> {
+  async getOpenPosition(
+    runId: string,
+    symbolId: string
+  ): Promise<OpenPositionContext | null> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT * FROM positions
@@ -727,11 +819,15 @@ export class MedvedssonDatabase {
       entryPrice: row.entry_price,
       qty: row.qty,
       notionalUsdt: row.notional_usdt,
-      entryFee: row.entry_fee
+      entryFee: row.entry_fee,
     };
   }
 
-  async getOpenPositions(runId: string): Promise<Array<PositionRow & { symbol: string; unrealized_pnl: number | null }>> {
+  async getOpenPositions(
+    runId: string
+  ): Promise<
+    Array<PositionRow & { symbol: string; unrealized_pnl: number | null }>
+  > {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT p.*, s.symbol
@@ -751,13 +847,19 @@ export class MedvedssonDatabase {
           latestClose === null
             ? null
             : row.side === 'LONG'
-              ? round((latestClose - row.entry_price) * row.qty - row.entry_fee, 8)
-              : round((row.entry_price - latestClose) * row.qty - row.entry_fee, 8);
+              ? round(
+                  (latestClose - row.entry_price) * row.qty - row.entry_fee,
+                  8
+                )
+              : round(
+                  (row.entry_price - latestClose) * row.qty - row.entry_fee,
+                  8
+                );
 
         return {
           ...row,
           symbol,
-          unrealized_pnl: unrealizedPnl
+          unrealized_pnl: unrealizedPnl,
         };
       })
     );
@@ -775,7 +877,10 @@ export class MedvedssonDatabase {
     return Number(rows[0]?.count ?? 0);
   }
 
-  async getLastClosedPosition(runId: string, symbolId: string): Promise<PositionRow | null> {
+  async getLastClosedPosition(
+    runId: string,
+    symbolId: string
+  ): Promise<PositionRow | null> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT * FROM positions
@@ -898,7 +1003,7 @@ export class MedvedssonDatabase {
         params.feeRate,
         params.feeAmount,
         params.fillModel,
-        JSON.stringify(params.meta)
+        JSON.stringify(params.meta),
       ]
     );
 
@@ -906,11 +1011,19 @@ export class MedvedssonDatabase {
       return null;
     }
 
-    const rows = await query<MysqlRow>(this.pool, 'SELECT * FROM simulated_orders WHERE id = ? LIMIT 1', [orderId]);
+    const rows = await query<MysqlRow>(
+      this.pool,
+      'SELECT * FROM simulated_orders WHERE id = ? LIMIT 1',
+      [orderId]
+    );
     return normalizeSimulatedOrderRow(rows[0]!);
   }
 
-  async getPendingOrdersForOpenTime(runId: string, symbolId: string, openTime: string): Promise<SimulatedOrderRow[]> {
+  async getPendingOrdersForOpenTime(
+    runId: string,
+    symbolId: string,
+    openTime: string
+  ): Promise<SimulatedOrderRow[]> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT * FROM simulated_orders
@@ -925,11 +1038,17 @@ export class MedvedssonDatabase {
     return rows.map(normalizeSimulatedOrderRow);
   }
 
-  async fillPendingOrder(orderId: string, fillPrice: number, fillTime: string): Promise<void> {
+  async fillPendingOrder(
+    orderId: string,
+    fillPrice: number,
+    fillTime: string
+  ): Promise<void> {
     await withTransaction(this.pool, async (client) => {
-      const orders = await query<MysqlRow>(client, 'SELECT * FROM simulated_orders WHERE id = ? FOR UPDATE', [
-        orderId
-      ]);
+      const orders = await query<MysqlRow>(
+        client,
+        'SELECT * FROM simulated_orders WHERE id = ? FOR UPDATE',
+        [orderId]
+      );
 
       if (!orders[0]) {
         return;
@@ -941,7 +1060,11 @@ export class MedvedssonDatabase {
         return;
       }
 
-      const finalFillPrice = adjustForSlippage(fillPrice, order.side, order.slippage_bps);
+      const finalFillPrice = adjustForSlippage(
+        fillPrice,
+        order.side,
+        order.slippage_bps
+      );
 
       await execute(
         client,
@@ -980,7 +1103,7 @@ export class MedvedssonDatabase {
             order.notional_usdt,
             order.fee_amount,
             order.signal_id,
-            `${order.strategy_run_id}:${order.symbol_id}`
+            `${order.strategy_run_id}:${order.symbol_id}`,
           ]
         );
 
@@ -994,10 +1117,16 @@ export class MedvedssonDatabase {
           : '';
 
       if (!positionId) {
-        throw new Error(`Exit order ${order.id} is missing a position reference.`);
+        throw new Error(
+          `Exit order ${order.id} is missing a position reference.`
+        );
       }
 
-      const positions = await query<MysqlRow>(client, 'SELECT * FROM positions WHERE id = ? FOR UPDATE', [positionId]);
+      const positions = await query<MysqlRow>(
+        client,
+        'SELECT * FROM positions WHERE id = ? FOR UPDATE',
+        [positionId]
+      );
 
       if (!positions[0]) {
         return;
@@ -1037,7 +1166,7 @@ export class MedvedssonDatabase {
           order.fee_amount,
           pnl.realizedPnl,
           order.signal_id,
-          position.id
+          position.id,
         ]
       );
 
@@ -1068,8 +1197,12 @@ export class MedvedssonDatabase {
       [params.equityUsdt, params.runId]
     );
 
-    const peak = Math.max(Number(peaks[0]?.peak ?? params.equityUsdt), params.equityUsdt);
-    const drawdownPct = peak === 0 ? 0 : round(((peak - params.equityUsdt) / peak) * 100, 8);
+    const peak = Math.max(
+      Number(peaks[0]?.peak ?? params.equityUsdt),
+      params.equityUsdt
+    );
+    const drawdownPct =
+      peak === 0 ? 0 : round(((peak - params.equityUsdt) / peak) * 100, 8);
 
     await execute(
       this.pool,
@@ -1094,7 +1227,7 @@ export class MedvedssonDatabase {
         params.unrealizedPnl,
         params.realizedPnlCum,
         drawdownPct,
-        params.openPositions
+        params.openPositions,
       ]
     );
   }
@@ -1123,7 +1256,10 @@ export class MedvedssonDatabase {
     return rows.map(normalizeSignalRow);
   }
 
-  async getRecentTrades(limit = 100, offset = 0): Promise<Array<PositionRow & { symbol: string }>> {
+  async getRecentTrades(
+    limit = 100,
+    offset = 0
+  ): Promise<Array<PositionRow & { symbol: string }>> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT p.*, s.symbol
@@ -1137,11 +1273,14 @@ export class MedvedssonDatabase {
 
     return rows.map((row) => ({
       ...normalizePositionRow(row),
-      symbol: String(row.symbol)
+      symbol: String(row.symbol),
     }));
   }
 
-  async getStatsSummary(runId: string, startingEquity: number): Promise<Record<string, number>> {
+  async getStatsSummary(
+    runId: string,
+    startingEquity: number
+  ): Promise<Record<string, number>> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT
@@ -1163,14 +1302,23 @@ export class MedvedssonDatabase {
     return {
       closedTrades,
       winRate: closedTrades === 0 ? 0 : round((wins / closedTrades) * 100, 4),
-      averageTradeReturn: row?.avg_return === null ? 0 : Number(row?.avg_return ?? 0),
+      averageTradeReturn:
+        row?.avg_return === null ? 0 : Number(row?.avg_return ?? 0),
       totalRealizedPnl: totalRealized,
       equity: round(startingEquity + totalRealized, 8),
-      maxDrawdownPct: row?.max_drawdown === null ? 0 : Number(row?.max_drawdown ?? 0)
+      maxDrawdownPct:
+        row?.max_drawdown === null ? 0 : Number(row?.max_drawdown ?? 0),
     };
   }
 
-  async getLatestSignalsBySymbol(): Promise<Array<{ symbol: string; signal_type: string; candle_close_time: Date; approved: boolean | null }>> {
+  async getLatestSignalsBySymbol(): Promise<
+    Array<{
+      symbol: string;
+      signal_type: string;
+      candle_close_time: Date;
+      approved: boolean | null;
+    }>
+  > {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT symbol, signal_type, candle_close_time, approved
@@ -1190,11 +1338,16 @@ export class MedvedssonDatabase {
       symbol: String(row.symbol),
       signal_type: String(row.signal_type),
       candle_close_time: parseDate(row.candle_close_time)!,
-      approved: row.approved === null || row.approved === undefined ? null : parseBoolean(row.approved)
+      approved:
+        row.approved === null || row.approved === undefined
+          ? null
+          : parseBoolean(row.approved),
     }));
   }
 
-  async upsertPushSubscription(subscription: PushSubscriptionRecord): Promise<void> {
+  async upsertPushSubscription(
+    subscription: PushSubscriptionRecord
+  ): Promise<void> {
     await execute(
       this.pool,
       `INSERT INTO push_subscriptions (
@@ -1216,8 +1369,12 @@ export class MedvedssonDatabase {
         subscription.p256dh,
         subscription.auth,
         subscription.enabled,
-        subscription.symbolFilters ? JSON.stringify(subscription.symbolFilters) : null,
-        subscription.eventFilters ? JSON.stringify(subscription.eventFilters) : null
+        subscription.symbolFilters
+          ? JSON.stringify(subscription.symbolFilters)
+          : null,
+        subscription.eventFilters
+          ? JSON.stringify(subscription.eventFilters)
+          : null,
       ]
     );
   }
@@ -1232,7 +1389,10 @@ export class MedvedssonDatabase {
     );
   }
 
-  async getPushSubscriptionsForEvent(symbol: string, eventType: string): Promise<PushSubscriptionRow[]> {
+  async getPushSubscriptionsForEvent(
+    symbol: string,
+    eventType: string
+  ): Promise<PushSubscriptionRow[]> {
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT *
@@ -1293,7 +1453,7 @@ export class MedvedssonDatabase {
           side: String(row.side) as OpenPositionContext['side'],
           entryPrice: Number(row.entry_price),
           qty: Number(row.qty),
-          entryFee: Number(row.entry_fee)
+          entryFee: Number(row.entry_fee),
         },
         latestClose
       );

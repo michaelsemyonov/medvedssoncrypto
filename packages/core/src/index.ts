@@ -2,13 +2,20 @@ import type { MedvedssonDatabase } from '@medvedsson/db';
 import {
   DryRunExecutionAdapter,
   type ExecutionAdapter,
-  evaluateRisk
+  evaluateRisk,
 } from '@medvedsson/execution';
-import { analyzeCandleSeries, MarketDataAdapter, mergeCandles } from '@medvedsson/market-data';
+import {
+  analyzeCandleSeries,
+  MarketDataAdapter,
+  mergeCandles,
+} from '@medvedsson/market-data';
 import type { NotificationService } from '@medvedsson/notifications';
 import type { AppConfig, Candle } from '@medvedsson/shared';
-import { round, timeframeToMs } from '@medvedsson/shared';
-import { evaluateMomentumStrategy, requiredCandles } from '@medvedsson/strategy';
+import { round, SIGNAL_TYPES, timeframeToMs } from '@medvedsson/shared';
+import {
+  evaluateMomentumStrategy,
+  requiredCandles,
+} from '@medvedsson/strategy';
 
 import {
   candlesProcessedCounter,
@@ -24,7 +31,7 @@ import {
   signalDecisionCounter,
   signalsCreatedCounter,
   simulatedOrdersCounter,
-  unrealizedPnlGauge
+  unrealizedPnlGauge,
 } from './metrics.ts';
 
 type LoggerLike = {
@@ -55,9 +62,9 @@ const isDatabaseError = (error: unknown): boolean => {
 
   return Boolean(
     candidate.errno !== undefined ||
-      candidate.sqlState ||
-      candidate.sqlMessage ||
-      candidate.code?.startsWith('ER_')
+    candidate.sqlState ||
+    candidate.sqlMessage ||
+    candidate.code?.startsWith('ER_')
   );
 };
 
@@ -89,11 +96,15 @@ export class TradingRunner {
     this.notifications = params.notifications;
     this.logger = params.logger;
     this.executionAdapter =
-      params.executionAdapter ?? new DryRunExecutionAdapter(params.db, params.config.execution);
+      params.executionAdapter ??
+      new DryRunExecutionAdapter(params.db, params.config.execution);
   }
 
   async init(): Promise<void> {
-    await this.db.replaceActiveSymbols(this.config.exchange, this.config.symbols);
+    await this.db.replaceActiveSymbols(
+      this.config.exchange,
+      this.config.symbols
+    );
   }
 
   getStatus(): RunnerStatus {
@@ -102,7 +113,7 @@ export class TradingRunner {
       runId: this.activeRunId,
       lastTickStartedAt: this.lastTickStartedAt,
       lastTickCompletedAt: this.lastTickCompletedAt,
-      lastError: this.lastError
+      lastError: this.lastError,
     };
   }
 
@@ -148,24 +159,34 @@ export class TradingRunner {
     }, this.config.pollIntervalMs);
   }
 
-  private computeCooldownRemainingBars(lastExitTime: string | null, currentCloseTime: string): number {
+  private computeCooldownRemainingBars(
+    lastExitTime: string | null,
+    currentCloseTime: string
+  ): number {
     if (!lastExitTime) {
       return 0;
     }
 
     const elapsedBars = Math.floor(
-      (new Date(currentCloseTime).getTime() - new Date(lastExitTime).getTime()) /
+      (new Date(currentCloseTime).getTime() -
+        new Date(lastExitTime).getTime()) /
         timeframeToMs(this.config.timeframe)
     );
 
     return Math.max(0, this.config.cooldownBars - elapsedBars);
   }
 
-  private async recordEquity(runId: string, snapshotTime: string): Promise<void> {
+  private async recordEquity(
+    runId: string,
+    snapshotTime: string
+  ): Promise<void> {
     const openPositions = await this.db.getOpenPositionsCount(runId);
     const unrealizedPnl = await this.db.computeUnrealizedPnl(runId);
     const realizedPnlCum = await this.db.getRealizedPnlCum(runId);
-    const balanceUsdt = round(this.config.execution.equityStartUsdt + realizedPnlCum, 8);
+    const balanceUsdt = round(
+      this.config.execution.equityStartUsdt + realizedPnlCum,
+      8
+    );
     const equityUsdt = round(balanceUsdt + unrealizedPnl, 8);
 
     await this.db.recordEquitySnapshot({
@@ -175,7 +196,7 @@ export class TradingRunner {
       equityUsdt,
       unrealizedPnl,
       realizedPnlCum,
-      openPositions
+      openPositions,
     });
 
     openPositionsGauge.set(openPositions);
@@ -184,35 +205,86 @@ export class TradingRunner {
     drawdownGauge.set(await this.db.getCurrentDrawdownPct(runId));
   }
 
-  private async processPendingOrders(runId: string, symbolId: string, candle: Candle): Promise<void> {
+  private async processPendingOrders(
+    runId: string,
+    symbolId: string,
+    candle: Candle
+  ): Promise<void> {
     await this.executionAdapter.processPendingFills({
       runId,
       symbolId,
       openPrice: candle.open,
-      openTime: candle.openTime
+      openTime: candle.openTime,
     });
   }
 
-  private async processCandle(runId: string, symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number], candle: Candle, history: Candle[]): Promise<void> {
+  private async finalizeProcessedCandle(
+    runId: string,
+    symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number],
+    candle: Candle
+  ): Promise<void> {
+    candlesProcessedCounter.inc({
+      symbol: symbol.symbol,
+    });
+
+    candleLagGauge.set(
+      {
+        symbol: symbol.symbol,
+      },
+      Date.now() - new Date(candle.closeTime).getTime()
+    );
+
+    await this.recordEquity(runId, candle.closeTime);
+  }
+
+  private async processCandle(
+    runId: string,
+    symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number],
+    candle: Candle,
+    history: Candle[]
+  ): Promise<void> {
     await this.processPendingOrders(runId, symbol.id, candle);
 
     const openPosition = await this.db.getOpenPosition(runId, symbol.id);
-    const signal = evaluateMomentumStrategy(history, this.config.signal, openPosition);
+    const signal = evaluateMomentumStrategy(
+      history,
+      this.config.signal,
+      openPosition
+    );
+
+    if (signal.signalType === SIGNAL_TYPES.NO_SIGNAL) {
+      await this.db.recordProcessedCandle({
+        runId,
+        symbolId: symbol.id,
+        candleCloseTime: signal.candleCloseTime,
+      });
+      await this.finalizeProcessedCandle(runId, symbol, candle);
+      return;
+    }
+
     const signalRow = await this.db.insertSignal({
       runId,
       symbolId: symbol.id,
       exchange: symbol.exchange,
       symbol: symbol.symbol,
       timeframe: this.config.timeframe,
-      signal
+      signal,
+    });
+    await this.db.recordProcessedCandle({
+      runId,
+      symbolId: symbol.id,
+      candleCloseTime: signal.candleCloseTime,
     });
 
     signalsCreatedCounter.inc({
       symbol: symbol.symbol,
-      signal_type: signal.signalType
+      signal_type: signal.signalType,
     });
 
-    const lastClosedPosition = await this.db.getLastClosedPosition(runId, symbol.id);
+    const lastClosedPosition = await this.db.getLastClosedPosition(
+      runId,
+      symbol.id
+    );
     const cooldownRemainingBars = this.computeCooldownRemainingBars(
       lastClosedPosition?.exit_time?.toISOString() ?? null,
       candle.closeTime
@@ -230,7 +302,7 @@ export class TradingRunner {
       currentDrawdownPct: await this.db.getCurrentDrawdownPct(runId),
       maxDailyDrawdownPct: this.config.maxDailyDrawdownPct,
       consecutiveLosses: await this.db.getConsecutiveLosses(runId),
-      maxConsecutiveLosses: this.config.maxConsecutiveLosses
+      maxConsecutiveLosses: this.config.maxConsecutiveLosses,
     });
 
     await this.db.updateSignalDecision(signalRow.id, decision);
@@ -238,15 +310,15 @@ export class TradingRunner {
       runId,
       signalId: signalRow.id,
       symbolId: symbol.id,
-      decision
+      decision,
     });
 
     signalDecisionCounter.inc({
       symbol: symbol.symbol,
-      approved: String(decision.approved)
+      approved: String(decision.approved),
     });
 
-    if (decision.approved && signal.signalType !== 'NO_SIGNAL') {
+    if (decision.approved) {
       const executionResult = await this.executionAdapter.handleApprovedSignal({
         runId,
         signalId: signalRow.id,
@@ -254,13 +326,13 @@ export class TradingRunner {
         signalType: signal.signalType,
         referencePrice: candle.close,
         scheduledForOpenTime: candle.closeTime,
-        openPosition
+        openPosition,
       });
 
       if (executionResult.orderCreated && executionResult.intent) {
         simulatedOrdersCounter.inc({
           symbol: symbol.symbol,
-          intent: executionResult.intent
+          intent: executionResult.intent,
         });
       }
 
@@ -271,9 +343,9 @@ export class TradingRunner {
         strategyVersion: this.config.strategyVersion,
         reason: signal.reason,
         approved: true,
-        referencePrice: candle.close
+        referencePrice: candle.close,
       });
-    } else if (signal.signalType !== 'NO_SIGNAL') {
+    } else {
       await this.notifications.notifySignal({
         symbol: symbol.symbol,
         signalType: signal.signalType,
@@ -281,28 +353,28 @@ export class TradingRunner {
         strategyVersion: this.config.strategyVersion,
         reason: decision.rejectionReason ?? signal.reason,
         approved: false,
-        referencePrice: candle.close
+        referencePrice: candle.close,
       });
     }
 
-    candlesProcessedCounter.inc({
-      symbol: symbol.symbol
-    });
-
-    candleLagGauge.set(
-      {
-        symbol: symbol.symbol
-      },
-      Date.now() - new Date(candle.closeTime).getTime()
-    );
-
-    await this.recordEquity(runId, candle.closeTime);
+    await this.finalizeProcessedCandle(runId, symbol, candle);
   }
 
-  private async processSymbol(runId: string, symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number]): Promise<void> {
-    const historyLimit = Math.max(this.config.signal.n + this.config.signal.hBars + 8, 192);
+  private async processSymbol(
+    runId: string,
+    symbol: Awaited<ReturnType<MedvedssonDatabase['listSymbols']>>[number]
+  ): Promise<void> {
+    const historyLimit = Math.max(
+      this.config.signal.n + this.config.signal.hBars + 8,
+      192
+    );
     const cachedCandles = this.config.enableCandleStorage
-      ? await this.db.getRecentCandles(this.config.exchange, symbol.symbol, this.config.timeframe, historyLimit)
+      ? await this.db.getRecentCandles(
+          this.config.exchange,
+          symbol.symbol,
+          this.config.timeframe,
+          historyLimit
+        )
       : [];
     let exchangeCandles: Candle[] = [];
     let usedCacheFallback = false;
@@ -315,7 +387,10 @@ export class TradingRunner {
         historyLimit
       );
 
-      marketDataLatencyGauge.set({ symbol: symbol.symbol }, Date.now() - startedAt);
+      marketDataLatencyGauge.set(
+        { symbol: symbol.symbol },
+        Date.now() - startedAt
+      );
     } catch (error) {
       usedCacheFallback = true;
       this.logger.warn(
@@ -324,7 +399,10 @@ export class TradingRunner {
       );
     }
 
-    const exchangeDiagnostics = analyzeCandleSeries(exchangeCandles, this.config.timeframe);
+    const exchangeDiagnostics = analyzeCandleSeries(
+      exchangeCandles,
+      this.config.timeframe
+    );
 
     if (exchangeDiagnostics.issues.length > 0) {
       this.logger.warn(
@@ -338,14 +416,17 @@ export class TradingRunner {
     }
 
     const candles = mergeCandles(cachedCandles, exchangeCandles);
-    const combinedDiagnostics = analyzeCandleSeries(candles, this.config.timeframe);
+    const combinedDiagnostics = analyzeCandleSeries(
+      candles,
+      this.config.timeframe
+    );
 
     if (combinedDiagnostics.issues.length > 0) {
       this.logger.warn(
         {
           symbol: symbol.symbol,
           diagnostics: combinedDiagnostics,
-          usedCacheFallback
+          usedCacheFallback,
         },
         'Merged candle quality issue detected.'
       );
@@ -355,9 +436,14 @@ export class TradingRunner {
       return;
     }
 
-    const lastProcessed = await this.db.getLastProcessedCloseTime(runId, symbol.id);
+    const lastProcessed = await this.db.getLastProcessedCloseTime(
+      runId,
+      symbol.id
+    );
     const candidates = candles.filter(
-      (candle) => !lastProcessed || new Date(candle.closeTime).getTime() > new Date(lastProcessed).getTime()
+      (candle) =>
+        !lastProcessed ||
+        new Date(candle.closeTime).getTime() > new Date(lastProcessed).getTime()
     );
 
     if (candidates.length === 0) {
@@ -367,7 +453,9 @@ export class TradingRunner {
 
     for (const candidate of candidates) {
       const history = candles.filter(
-        (candle) => new Date(candle.closeTime).getTime() <= new Date(candidate.closeTime).getTime()
+        (candle) =>
+          new Date(candle.closeTime).getTime() <=
+          new Date(candidate.closeTime).getTime()
       );
 
       await this.processCandle(runId, symbol, candidate, history);
@@ -383,7 +471,9 @@ export class TradingRunner {
     this.lastError = null;
 
     try {
-      const symbols = (await this.db.listSymbols()).filter((symbol) => symbol.active);
+      const symbols = (await this.db.listSymbols()).filter(
+        (symbol) => symbol.active
+      );
 
       for (const symbol of symbols) {
         await this.processSymbol(this.activeRunId, symbol);
@@ -391,7 +481,8 @@ export class TradingRunner {
 
       this.lastTickCompletedAt = new Date().toISOString();
     } catch (error) {
-      this.lastError = error instanceof Error ? error.message : 'Unknown runner error';
+      this.lastError =
+        error instanceof Error ? error.message : 'Unknown runner error';
       runnerErrorsCounter.inc();
 
       if (isDatabaseError(error)) {

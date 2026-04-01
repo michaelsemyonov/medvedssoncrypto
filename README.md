@@ -1,6 +1,6 @@
 # MedvedssonCrypto
 
-Backend-first crypto dry-run trading platform built as a monorepo. It monitors configured `*/USDT` pairs on the `5m` timeframe, applies the exact `96/5/72` momentum formula, persists every decision trail in MySQL, simulates next-open fills, exposes health and metrics endpoints, and ships a Next.js PWA for signal visibility and web-push delivery.
+Backend-first crypto dry-run trading platform built as a monorepo. It monitors configured `*/USDT` pairs on the `5m` timeframe, applies the exact `96/5/72` momentum formula, persists actionable signals and execution trail data in MySQL, simulates next-open fills, exposes health and metrics endpoints, and ships a Next.js PWA for signal visibility and web-push delivery.
 
 ## What V1 does
 
@@ -12,7 +12,7 @@ Backend-first crypto dry-run trading platform built as a monorepo. It monitors c
   - `LONG if r_t > 5 * B_t`
   - `SHORT if r_t < -5 * B_t`
   - Exit signal after `72` bars
-- Persists signals, risk decisions, orders, positions, equity snapshots, and push subscriptions in MySQL
+- Persists actionable signals, risk decisions, orders, positions, equity snapshots, and push subscriptions in MySQL
 - Fills simulated orders at the next candle open with configurable slippage and fees
 - Sends Web Push notifications to a PWA
 - Exposes `/health`, `/ready`, `/metrics`, `/dashboard`, `/signals`, `/positions`, `/trades`, and admin run/symbol endpoints
