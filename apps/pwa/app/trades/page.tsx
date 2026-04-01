@@ -8,6 +8,11 @@ export default async function TradesPage() {
   }>('/trades?limit=100', {
     trades: [],
   });
+  const trades = [...data.trades].sort((left, right) => {
+    const leftExitTime = new Date(String(left.exit_time ?? 0)).getTime();
+    const rightExitTime = new Date(String(right.exit_time ?? 0)).getTime();
+    return rightExitTime - leftExitTime;
+  });
 
   return (
     <section className="card">
@@ -31,14 +36,14 @@ export default async function TradesPage() {
           </tr>
         </thead>
         <tbody>
-          {data.trades.length === 0 ? (
+          {trades.length === 0 ? (
             <tr className="table-empty-row">
               <td colSpan={7} className="muted">
                 No trade data is available right now.
               </td>
             </tr>
           ) : null}
-          {data.trades.map((trade) => {
+          {trades.map((trade) => {
             const durationMs =
               new Date(String(trade.exit_time)).getTime() -
               new Date(String(trade.entry_time)).getTime();
