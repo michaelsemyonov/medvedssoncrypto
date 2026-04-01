@@ -52,7 +52,7 @@ export function SettingsClient({ apiUnavailable, vapidPublicKey, symbols }: Sett
       body: JSON.stringify({
         subscription,
         symbolFilters: selectedSymbols,
-        eventFilters: ['entry', 'exit', 'risk_rejection', 'runner_error']
+        eventFilters: ['entry', 'exit', 'runner_error']
       })
     });
 

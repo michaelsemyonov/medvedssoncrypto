@@ -8,7 +8,8 @@ type LoggerLike = {
   error: (payload: unknown, message?: string) => void;
 };
 
-type PushEventType = 'entry' | 'exit' | 'risk_rejection' | 'runner_error';
+type PushEventType = 'entry' | 'exit' | 'runner_error';
+type SignalPushEventType = Exclude<PushEventType, 'runner_error'>;
 
 export class NotificationService {
   private readonly db: MedvedssonDatabase;
@@ -39,11 +40,7 @@ export class NotificationService {
     }
   }
 
-  private getEventType(signalType: SignalType, approved: boolean): PushEventType {
-    if (!approved) {
-      return 'risk_rejection';
-    }
-
+  private getEventType(signalType: SignalType): SignalPushEventType {
     if (signalType === 'LONG_ENTRY' || signalType === 'SHORT_ENTRY') {
       return 'entry';
     }
@@ -52,7 +49,7 @@ export class NotificationService {
       return 'exit';
     }
 
-    return 'risk_rejection';
+    throw new Error(`Unsupported push notification signal type: ${signalType}`);
   }
 
   async notifySignal(params: {
@@ -64,11 +61,11 @@ export class NotificationService {
     approved: boolean;
     referencePrice?: number;
   }): Promise<void> {
-    if (!this.enabled) {
+    if (!this.enabled || !params.approved) {
       return;
     }
 
-    const eventType = this.getEventType(params.signalType, params.approved);
+    const eventType = this.getEventType(params.signalType);
     const subscriptions = await this.db.getPushSubscriptionsForEvent(params.symbol, eventType);
 
     if (subscriptions.length === 0) {
@@ -76,9 +73,7 @@ export class NotificationService {
     }
 
     const title = `${params.symbol} ${params.signalType.replace('_', ' ')}`;
-    const body = params.approved
-      ? `${params.reason} Next-open dry-run execution scheduled.`
-      : `Rejected: ${params.reason}`;
+    const body = `${params.reason} Next-open dry-run execution scheduled.`;
     const payload = JSON.stringify({
       title,
       body,
