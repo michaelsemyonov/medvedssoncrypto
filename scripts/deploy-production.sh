@@ -31,6 +31,27 @@ set -euo pipefail
 source /home/semyonov-c/.nvm/nvm.sh
 cd ~/htdocs/c.semyonov.se
 
+wait_for_http() {
+  local name="$1"
+  local url="$2"
+  local extra_curl_arg="${3:-}"
+  local attempts="${4:-30}"
+  local sleep_seconds="${5:-2}"
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if curl --fail --silent ${extra_curl_arg:+$extra_curl_arg} "$url" >/dev/null; then
+      echo "$name is ready."
+      return 0
+    fi
+
+    echo "Waiting for $name ($attempt/$attempts)..."
+    sleep "$sleep_seconds"
+  done
+
+  echo "$name did not become ready in time: $url" >&2
+  return 1
+}
+
 git fetch origin main
 git checkout main
 git pull --ff-only origin main
@@ -43,8 +64,8 @@ pm2 startOrRestart ecosystem.config.cjs --update-env
 pm2 save
 pm2 status
 
-curl --fail --silent http://127.0.0.1:3001/health >/dev/null
-curl --fail --silent --insecure https://c.semyonov.se/login >/dev/null
+wait_for_http "API health" "http://127.0.0.1:3001/health"
+wait_for_http "PWA login" "https://c.semyonov.se/login" "--insecure"
 EOF
 
 echo "Production deploy finished."
