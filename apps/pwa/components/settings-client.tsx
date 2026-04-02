@@ -1177,15 +1177,9 @@ export function SettingsClient({
     setExchangeSavingKey(exchange);
 
     try {
-      const response = await fetch(
-        `/api/settings/exchanges/${exchange}/${action}`,
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-          },
-        }
-      );
+      const response = await fetch(`/api/settings/exchanges/${exchange}/${action}`, {
+        method: 'POST',
+      });
 
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));

@@ -46,13 +46,14 @@ export const proxyJson = async (
   const init: RequestInit = {
     method: options.method,
     headers: {
-      'content-type': 'application/json',
       authorization: `Bearer ${token}`,
     },
     cache: 'no-store',
   };
 
   if (options.body !== undefined) {
+    (init.headers as Record<string, string>)['content-type'] =
+      'application/json';
     init.body = JSON.stringify(options.body);
   }
 
