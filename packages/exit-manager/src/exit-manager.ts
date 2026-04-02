@@ -191,6 +191,7 @@ export const evaluateExit = (params: {
 
   // Priority 4: Time-based exit
   if (
+    !trailingArmed &&
     typeof config.maxBarsInTrade === 'number' &&
     barsHeld >= config.maxBarsInTrade
   ) {

@@ -691,6 +691,29 @@ describe('evaluateExit – EXIT_TIME_STOP', () => {
     expect(result.action).toBe('EXIT_TRAILING_PROFIT');
   });
 
+  it('does not apply time stop when trailing is armed', () => {
+    const position = makeLongPosition({
+      trailingArmed: true,
+      maxFavorablePrice: 102,
+      maxFavorableProfitPct: 2.0,
+      barsHeld: 71,
+    });
+
+    const config: ExitConfig = {
+      trailing: TRAILING_PROFILES.BALANCED,
+      maxBarsInTrade: 72,
+    };
+
+    const result = evaluateExit({
+      position,
+      market: makeMarket(101.8),
+      config,
+    });
+
+    expect(result.action).toBe('HOLD');
+    expect(result.reason).toBe('trailing_active_hold');
+  });
+
   it('signal reversal takes priority over time stop', () => {
     const config: ExitConfig = {
       trailing: TRAILING_PROFILES.BALANCED,
