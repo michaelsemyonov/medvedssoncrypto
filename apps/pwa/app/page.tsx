@@ -87,7 +87,7 @@ export default async function DashboardPage() {
             {Number(dashboard.stats.winRate ?? 0).toFixed(1)}%
           </div>
           <p className="muted">
-            {dashboard.stats.closedTrades} closed simulated trades.
+            {dashboard.stats.closedTrades} simulated trades closed today.
           </p>
         </article>
       </section>

@@ -103,6 +103,11 @@ type SignalWithCandlesRow = SignalRow & {
   recent_candles: Candle[];
 };
 
+type StatsSummaryOptions = {
+  startTime?: string;
+  endTime?: string;
+};
+
 type PositionRow = {
   id: string;
   strategy_run_id: string;
@@ -1239,12 +1244,21 @@ export class FakeMedvedssonDatabase {
 
   async getStatsSummary(
     runId: string | null,
-    startingEquity: number
+    startingEquity: number,
+    options: StatsSummaryOptions = {}
   ): Promise<Record<string, number>> {
+    const start =
+      options.startTime === undefined
+        ? null
+        : new Date(options.startTime).getTime();
+    const end =
+      options.endTime === undefined ? null : new Date(options.endTime).getTime();
     const closedTrades = this.positions.filter(
       (item) =>
         item.status === 'CLOSED' &&
-        (runId === null || item.strategy_run_id === runId)
+        (runId === null || item.strategy_run_id === runId) &&
+        (start === null || (item.exit_time?.getTime() ?? 0) >= start) &&
+        (end === null || (item.exit_time?.getTime() ?? 0) < end)
     );
     const wins = closedTrades.filter(
       (item) => (item.realized_pnl ?? 0) > 0
@@ -1256,7 +1270,12 @@ export class FakeMedvedssonDatabase {
     const maxDrawdown = Math.max(
       0,
       ...this.equitySnapshots
-        .filter((item) => runId === null || item.strategy_run_id === runId)
+        .filter(
+          (item) =>
+            (runId === null || item.strategy_run_id === runId) &&
+            (start === null || item.snapshot_time.getTime() >= start) &&
+            (end === null || item.snapshot_time.getTime() < end)
+        )
         .map((item) => item.drawdown_pct)
     );
 

@@ -448,7 +448,10 @@ export const buildApp = async () => {
       .reduce((sum, symbol) => sum + Number(symbol.equity_start_usdt), 0);
     const stats =
       runs.length > 0
-        ? await db.getStatsSummary(null, startingEquity)
+        ? await db.getStatsSummary(null, startingEquity, {
+            startTime: today.start,
+            endTime: today.end,
+          })
         : {
             closedTrades: 0,
             winRate: 0,

@@ -37,6 +37,11 @@ type RealizedPnlBetweenOptions = {
   runId?: string | null;
 };
 
+type StatsSummaryOptions = {
+  startTime?: string;
+  endTime?: string;
+};
+
 type RunRow = {
   id: string;
   name: string;
@@ -2031,11 +2036,38 @@ export class MedvedssonDatabase {
 
   async getStatsSummary(
     runId: string | null,
-    startingEquity: number
+    startingEquity: number,
+    options: StatsSummaryOptions = {}
   ): Promise<Record<string, number>> {
-    const runFilter = runId === null ? '' : 'WHERE strategy_run_id = ?';
-    const drawdownFilter = runId === null ? '' : ' WHERE strategy_run_id = ?';
-    const params = runId === null ? [] : [runId, runId];
+    const { startTime, endTime } = options;
+    const positionFilters = [`status = 'CLOSED'`];
+    const positionParams: Array<string | number> = [];
+    const drawdownFilters: string[] = [];
+    const drawdownParams: Array<string | number> = [];
+
+    if (runId !== null) {
+      positionFilters.push('strategy_run_id = ?');
+      drawdownFilters.push('strategy_run_id = ?');
+      positionParams.push(runId);
+      drawdownParams.push(runId);
+    }
+
+    if (startTime !== undefined && endTime !== undefined) {
+      const mysqlStartTime = toMysqlDateTime(startTime);
+      const mysqlEndTime = toMysqlDateTime(endTime);
+
+      positionFilters.push('exit_time >= ?', 'exit_time < ?');
+      positionParams.push(mysqlStartTime, mysqlEndTime);
+
+      drawdownFilters.push('snapshot_time >= ?', 'snapshot_time < ?');
+      drawdownParams.push(mysqlStartTime, mysqlEndTime);
+    }
+
+    const drawdownFilter =
+      drawdownFilters.length === 0
+        ? ''
+        : ` WHERE ${drawdownFilters.join('\n             AND ')}`;
+    const params = [...drawdownParams, ...positionParams];
     const rows = await query<MysqlRow>(
       this.pool,
       `SELECT
@@ -2045,7 +2077,7 @@ export class MedvedssonDatabase {
          SUM(CASE WHEN status = 'CLOSED' THEN realized_pnl ELSE 0 END) AS total_realized,
          (SELECT MAX(drawdown_pct) FROM equity_snapshots${drawdownFilter}) AS max_drawdown
        FROM positions
-       ${runFilter}`,
+       WHERE ${positionFilters.join('\n         AND ')}`,
       params
     );
 
