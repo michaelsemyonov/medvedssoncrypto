@@ -283,7 +283,11 @@ export const buildCredentialUpdate = (params: {
 };
 
 class BybitExchangeClient {
-  constructor(private readonly credentials: DecryptedExchangeCredentials) {}
+  private readonly credentials: DecryptedExchangeCredentials;
+
+  constructor(credentials: DecryptedExchangeCredentials) {
+    this.credentials = credentials;
+  }
 
   private async request<T>(options: RequestOptions): Promise<BybitResponse<T>> {
     const method = options.method ?? 'GET';
@@ -436,7 +440,11 @@ class BybitExchangeClient {
 }
 
 class OkxExchangeClient {
-  constructor(private readonly credentials: DecryptedExchangeCredentials) {}
+  private readonly credentials: DecryptedExchangeCredentials;
+
+  constructor(credentials: DecryptedExchangeCredentials) {
+    this.credentials = credentials;
+  }
 
   private async request<T>(options: RequestOptions): Promise<OkxResponse<T>> {
     const method = options.method ?? 'GET';
