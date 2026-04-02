@@ -6,6 +6,16 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const { data, unavailable } = await fetchApiWithFallback<{
     vapidPublicKey: string;
+    exchangeAccounts: Array<{
+      exchange: 'bybit' | 'okx';
+      apiKeyMask: string | null;
+      hasApiKey: boolean;
+      hasApiSecret: boolean;
+      hasApiPassphrase: boolean;
+      lastValidatedAt: string | null;
+      lastSyncAt: string | null;
+      lastSyncError: string | null;
+    }>;
     symbols: Array<{
       id: string;
       exchange: 'bybit' | 'binance' | 'okx';
@@ -83,6 +93,7 @@ export default async function SettingsPage() {
     };
   }>('/settings', {
     vapidPublicKey: '',
+    exchangeAccounts: [],
     symbols: [],
     defaults: {
       symbol: '',
@@ -126,6 +137,7 @@ export default async function SettingsPage() {
     <SettingsClient
       apiUnavailable={unavailable}
       vapidPublicKey={String(data.vapidPublicKey ?? '')}
+      exchangeAccounts={data.exchangeAccounts ?? []}
       symbols={data.symbols ?? []}
       defaults={data.defaults}
     />

@@ -278,4 +278,48 @@ export const MIGRATIONS: Array<{ id: string; sql: string }> = [
       ADD COLUMN trailing_min_locked_profit_pct DOUBLE NOT NULL DEFAULT 0.4 AFTER trailing_giveback_max_pct;
     `,
   },
+  {
+    id: '007_exchange_accounts_and_positions',
+    sql: `
+      CREATE TABLE IF NOT EXISTS exchange_accounts (
+        exchange VARCHAR(32) PRIMARY KEY,
+        api_key_ciphertext TEXT NULL,
+        api_secret_ciphertext TEXT NULL,
+        api_passphrase_ciphertext TEXT NULL,
+        api_key_mask VARCHAR(64) NULL,
+        has_api_key BOOLEAN NOT NULL DEFAULT FALSE,
+        has_api_secret BOOLEAN NOT NULL DEFAULT FALSE,
+        has_api_passphrase BOOLEAN NOT NULL DEFAULT FALSE,
+        last_validated_at DATETIME(3) NULL,
+        last_sync_at DATETIME(3) NULL,
+        last_sync_error TEXT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+      );
+
+      CREATE TABLE IF NOT EXISTS exchange_positions (
+        id VARCHAR(36) PRIMARY KEY,
+        exchange VARCHAR(32) NOT NULL,
+        external_position_id VARCHAR(128) NOT NULL,
+        instrument_id VARCHAR(64) NOT NULL,
+        symbol VARCHAR(32) NOT NULL,
+        side VARCHAR(16) NOT NULL,
+        status VARCHAR(16) NOT NULL,
+        qty DOUBLE NOT NULL,
+        entry_price DOUBLE NOT NULL,
+        mark_price DOUBLE NULL,
+        notional_usdt DOUBLE NOT NULL,
+        unrealized_pnl DOUBLE NULL,
+        stop_loss_price DOUBLE NULL,
+        linked_position_id VARCHAR(36) NULL,
+        opened_at DATETIME(3) NULL,
+        synced_at DATETIME(3) NOT NULL,
+        meta JSON NOT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        UNIQUE KEY exchange_positions_unique (exchange, external_position_id),
+        KEY exchange_positions_status_idx (exchange, status, symbol)
+      );
+    `,
+  },
 ];

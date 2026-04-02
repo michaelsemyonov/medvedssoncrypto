@@ -21,10 +21,15 @@ type PositionPageItem = {
   entry_time: string;
   id: string;
   is_counter_position: boolean;
+  last_synced_at: string | null;
+  linked_position_id: string | null;
   notional_usdt: number;
+  position_source: 'simulated' | 'exchange';
   qty: number;
   side: 'LONG' | 'SHORT';
+  stop_loss_price: number | null;
   symbol: string;
+  supports_trailing: boolean;
   unrealized_pnl: number | null;
   trailing_profile: string;
   trailing_enabled: boolean;
@@ -279,6 +284,71 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
   );
 }
 
+function ExchangeProtectionDetails({
+  position,
+}: {
+  position: PositionPageItem;
+}) {
+  return (
+    <details className="position-subcard">
+      <summary className="position-subsummary">
+        <span className="position-subhead">
+          <h4>Exchange Protection</h4>
+          {position.stop_loss_price !== null ? (
+            <span className="pill">Stop Loss Active</span>
+          ) : (
+            <span className="pill pill-warn">Stop Loss Missing</span>
+          )}
+        </span>
+        <span className="position-subsummary-values">
+          <span className="trade-summary-value">
+            <span className="trade-summary-label">Source</span>
+            <strong>Exchange Sync</strong>
+          </span>
+          <span className="trade-summary-value">
+            <span className="trade-summary-label">Stop Loss</span>
+            <strong>{formatRate(position.stop_loss_price)}</strong>
+          </span>
+          <span className="trade-summary-value">
+            <span className="trade-summary-label">Last Sync</span>
+            <strong>
+              {position.last_synced_at
+                ? formatDateTime(position.last_synced_at)
+                : 'n/a'}
+            </strong>
+          </span>
+        </span>
+      </summary>
+      <div className="position-table-wrap">
+        <table className="position-info-table position-info-table-compact">
+          <tbody>
+            <tr>
+              <th scope="row">Position Source</th>
+              <td>Imported from exchange</td>
+            </tr>
+            <tr>
+              <th scope="row">Stop Loss</th>
+              <td>{formatRate(position.stop_loss_price)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Last Synced</th>
+              <td>
+                {position.last_synced_at
+                  ? formatDateTime(position.last_synced_at)
+                  : 'n/a'}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Linked App Position</th>
+              <td>{position.linked_position_id ? 'Matched' : 'Not linked'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
 export default async function PositionsPage() {
   const { data, unavailable } = await fetchApiWithFallback<{
     positions: PositionPageItem[];
@@ -310,7 +380,10 @@ export default async function PositionsPage() {
                       <ExchangeBadge compact exchange={position.broker} />
                     </div>
                   </div>
-                  <div className="position-pill-row">
+                    <div className="position-pill-row">
+                    {position.position_source === 'exchange' ? (
+                      <span className="pill">Exchange Sync</span>
+                    ) : null}
                     {position.is_counter_position ? (
                       <span className="pill pill-warn">Counter</span>
                     ) : null}
@@ -321,7 +394,11 @@ export default async function PositionsPage() {
                 </div>
                 <PositionOverviewTable position={position} />
               </div>
-              <TrailingDetails position={position} />
+              {position.supports_trailing ? (
+                <TrailingDetails position={position} />
+              ) : (
+                <ExchangeProtectionDetails position={position} />
+              )}
               <Suspense fallback={<PositionChartFallback />}>
                 <PositionChart
                   entryPrice={position.entry_price}

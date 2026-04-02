@@ -567,6 +567,7 @@ a {
   gap: 16px;
 }
 
+.exchange-panel,
 .settings-symbols-panel,
 .settings-symbols-toolbar {
   display: grid;

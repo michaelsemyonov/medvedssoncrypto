@@ -196,6 +196,62 @@ type PushSubscriptionRow = {
   updated_at: Date;
 };
 
+type ExchangeAccountRow = {
+  exchange: BrokerName;
+  api_key_ciphertext: string | null;
+  api_secret_ciphertext: string | null;
+  api_passphrase_ciphertext: string | null;
+  api_key_mask: string | null;
+  has_api_key: boolean;
+  has_api_secret: boolean;
+  has_api_passphrase: boolean;
+  last_validated_at: Date | null;
+  last_sync_at: Date | null;
+  last_sync_error: string | null;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type ExchangePositionRow = {
+  id: string;
+  exchange: BrokerName;
+  external_position_id: string;
+  instrument_id: string;
+  symbol: string;
+  side: 'LONG' | 'SHORT';
+  status: 'OPEN' | 'CLOSED';
+  qty: number;
+  entry_price: number;
+  mark_price: number | null;
+  notional_usdt: number;
+  unrealized_pnl: number | null;
+  stop_loss_price: number | null;
+  linked_position_id: string | null;
+  opened_at: Date | null;
+  synced_at: Date;
+  meta: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type ExchangePositionUpsertParams = {
+  exchange: BrokerName;
+  externalPositionId: string;
+  instrumentId: string;
+  symbol: string;
+  side: ExchangePositionRow['side'];
+  qty: number;
+  entryPrice: number;
+  markPrice: number | null;
+  notionalUsdt: number;
+  unrealizedPnl: number | null;
+  stopLossPrice: number | null;
+  linkedPositionId: string | null;
+  openedAt: string | null;
+  syncedAt: string;
+  meta: Record<string, unknown>;
+};
+
 export type DbPoolLike = mysql.Pool;
 
 const toMysqlDateTime = (value: string | Date): string => {
@@ -566,6 +622,55 @@ const normalizePushSubscriptionRow = (row: MysqlRow): PushSubscriptionRow => ({
   updated_at: parseDate(row.updated_at)!,
 });
 
+const normalizeExchangeAccountRow = (row: MysqlRow): ExchangeAccountRow => ({
+  exchange: String(row.exchange) as BrokerName,
+  api_key_ciphertext:
+    row.api_key_ciphertext === null ? null : String(row.api_key_ciphertext),
+  api_secret_ciphertext:
+    row.api_secret_ciphertext === null
+      ? null
+      : String(row.api_secret_ciphertext),
+  api_passphrase_ciphertext:
+    row.api_passphrase_ciphertext === null
+      ? null
+      : String(row.api_passphrase_ciphertext),
+  api_key_mask: row.api_key_mask === null ? null : String(row.api_key_mask),
+  has_api_key: parseBoolean(row.has_api_key),
+  has_api_secret: parseBoolean(row.has_api_secret),
+  has_api_passphrase: parseBoolean(row.has_api_passphrase),
+  last_validated_at: parseDate(row.last_validated_at),
+  last_sync_at: parseDate(row.last_sync_at),
+  last_sync_error:
+    row.last_sync_error === null ? null : String(row.last_sync_error),
+  created_at: parseDate(row.created_at)!,
+  updated_at: parseDate(row.updated_at)!,
+});
+
+const normalizeExchangePositionRow = (row: MysqlRow): ExchangePositionRow => ({
+  id: String(row.id),
+  exchange: String(row.exchange) as BrokerName,
+  external_position_id: String(row.external_position_id),
+  instrument_id: String(row.instrument_id),
+  symbol: String(row.symbol),
+  side: String(row.side) as ExchangePositionRow['side'],
+  status: String(row.status) as ExchangePositionRow['status'],
+  qty: Number(row.qty),
+  entry_price: Number(row.entry_price),
+  mark_price: row.mark_price === null ? null : Number(row.mark_price),
+  notional_usdt: Number(row.notional_usdt),
+  unrealized_pnl:
+    row.unrealized_pnl === null ? null : Number(row.unrealized_pnl),
+  stop_loss_price:
+    row.stop_loss_price === null ? null : Number(row.stop_loss_price),
+  linked_position_id:
+    row.linked_position_id === null ? null : String(row.linked_position_id),
+  opened_at: parseDate(row.opened_at),
+  synced_at: parseDate(row.synced_at)!,
+  meta: parseJson<Record<string, unknown>>(row.meta),
+  created_at: parseDate(row.created_at)!,
+  updated_at: parseDate(row.updated_at)!,
+});
+
 export const createPool = (connectionString: string): DbPoolLike => {
   const pool = mysql.createPool({
     uri: connectionString,
@@ -577,7 +682,7 @@ export const createPool = (connectionString: string): DbPoolLike => {
   });
 
   pool.on('connection', (connection) => {
-    connection.query("SET time_zone = '+00:00'");
+    void connection.query("SET time_zone = '+00:00'");
   });
 
   return pool;
@@ -2133,6 +2238,292 @@ export class MedvedssonDatabase {
           ? null
           : parseBoolean(row.approved),
     }));
+  }
+
+  async listExchangeAccounts(): Promise<ExchangeAccountRow[]> {
+    const rows = await query<MysqlRow>(
+      this.pool,
+      `SELECT *
+       FROM exchange_accounts
+       ORDER BY exchange ASC`
+    );
+
+    return rows.map(normalizeExchangeAccountRow);
+  }
+
+  async getExchangeAccount(
+    exchange: BrokerName
+  ): Promise<ExchangeAccountRow | null> {
+    const rows = await query<MysqlRow>(
+      this.pool,
+      `SELECT *
+       FROM exchange_accounts
+       WHERE exchange = ?
+       LIMIT 1`,
+      [exchange]
+    );
+
+    return rows[0] ? normalizeExchangeAccountRow(rows[0]) : null;
+  }
+
+  async upsertExchangeAccount(params: {
+    exchange: BrokerName;
+    apiKeyCiphertext: string | null;
+    apiSecretCiphertext: string | null;
+    apiPassphraseCiphertext: string | null;
+    apiKeyMask: string | null;
+    hasApiKey: boolean;
+    hasApiSecret: boolean;
+    hasApiPassphrase: boolean;
+    lastValidatedAt?: string | null;
+    lastSyncAt?: string | null;
+    lastSyncError?: string | null;
+  }): Promise<ExchangeAccountRow> {
+    await execute(
+      this.pool,
+      `INSERT INTO exchange_accounts (
+         exchange,
+         api_key_ciphertext,
+         api_secret_ciphertext,
+         api_passphrase_ciphertext,
+         api_key_mask,
+         has_api_key,
+         has_api_secret,
+         has_api_passphrase,
+         last_validated_at,
+         last_sync_at,
+         last_sync_error
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         api_key_ciphertext = VALUES(api_key_ciphertext),
+         api_secret_ciphertext = VALUES(api_secret_ciphertext),
+         api_passphrase_ciphertext = VALUES(api_passphrase_ciphertext),
+         api_key_mask = VALUES(api_key_mask),
+         has_api_key = VALUES(has_api_key),
+         has_api_secret = VALUES(has_api_secret),
+         has_api_passphrase = VALUES(has_api_passphrase),
+         last_validated_at = VALUES(last_validated_at),
+         last_sync_at = VALUES(last_sync_at),
+         last_sync_error = VALUES(last_sync_error),
+         updated_at = CURRENT_TIMESTAMP(3)`,
+      [
+        params.exchange,
+        params.apiKeyCiphertext,
+        params.apiSecretCiphertext,
+        params.apiPassphraseCiphertext,
+        params.apiKeyMask,
+        params.hasApiKey,
+        params.hasApiSecret,
+        params.hasApiPassphrase,
+        params.lastValidatedAt ? toMysqlDateTime(params.lastValidatedAt) : null,
+        params.lastSyncAt ? toMysqlDateTime(params.lastSyncAt) : null,
+        params.lastSyncError ?? null,
+      ]
+    );
+
+    const row = await this.getExchangeAccount(params.exchange);
+
+    if (!row) {
+      throw new Error(
+        `Exchange account ${params.exchange} was not found after upsert.`
+      );
+    }
+
+    return row;
+  }
+
+  async updateExchangeAccountSyncStatus(params: {
+    exchange: BrokerName;
+    validatedAt?: string | null;
+    syncedAt?: string | null;
+    syncError?: string | null;
+  }): Promise<void> {
+    const updates: string[] = [];
+    const values: Array<string | null> = [];
+
+    if (params.validatedAt !== undefined) {
+      updates.push('last_validated_at = ?');
+      values.push(
+        params.validatedAt === null ? null : toMysqlDateTime(params.validatedAt)
+      );
+    }
+
+    if (params.syncedAt !== undefined) {
+      updates.push('last_sync_at = ?');
+      values.push(
+        params.syncedAt === null ? null : toMysqlDateTime(params.syncedAt)
+      );
+    }
+
+    if (params.syncError !== undefined) {
+      updates.push('last_sync_error = ?');
+      values.push(params.syncError);
+    }
+
+    if (updates.length === 0) {
+      return;
+    }
+
+    await execute(
+      this.pool,
+      `UPDATE exchange_accounts
+       SET ${updates.join(', ')},
+           updated_at = CURRENT_TIMESTAMP(3)
+       WHERE exchange = ?`,
+      [...values, params.exchange]
+    );
+  }
+
+  async listOpenExchangePositions(
+    exchange?: BrokerName
+  ): Promise<ExchangePositionRow[]> {
+    const filters = [`status = 'OPEN'`];
+    const values: string[] = [];
+
+    if (exchange) {
+      filters.push('exchange = ?');
+      values.push(exchange);
+    }
+
+    const rows = await query<MysqlRow>(
+      this.pool,
+      `SELECT *
+       FROM exchange_positions
+       WHERE ${filters.join(' AND ')}
+       ORDER BY symbol ASC, exchange ASC`,
+      values
+    );
+
+    return rows.map(normalizeExchangePositionRow);
+  }
+
+  async getExchangePositionById(id: string): Promise<ExchangePositionRow | null> {
+    const rows = await query<MysqlRow>(
+      this.pool,
+      `SELECT *
+       FROM exchange_positions
+       WHERE id = ?
+       LIMIT 1`,
+      [id]
+    );
+
+    return rows[0] ? normalizeExchangePositionRow(rows[0]) : null;
+  }
+
+  async syncExchangePositions(params: {
+    exchange: BrokerName;
+    syncedAt: string;
+    positions: ExchangePositionUpsertParams[];
+  }): Promise<{
+    openCount: number;
+    linkedCount: number;
+    closedCount: number;
+  }> {
+    return withTransaction(this.pool, async (client) => {
+      const existingRows = await query<MysqlRow>(
+        client,
+        `SELECT *
+         FROM exchange_positions
+         WHERE exchange = ? AND status = 'OPEN'
+         FOR UPDATE`,
+        [params.exchange]
+      );
+      const existingOpen = existingRows.map(normalizeExchangePositionRow);
+      const seenIds = new Set<string>();
+
+      for (const position of params.positions) {
+        seenIds.add(position.externalPositionId);
+
+        await execute(
+          client,
+          `INSERT INTO exchange_positions (
+             id,
+             exchange,
+             external_position_id,
+             instrument_id,
+             symbol,
+             side,
+             status,
+             qty,
+             entry_price,
+             mark_price,
+             notional_usdt,
+             unrealized_pnl,
+             stop_loss_price,
+             linked_position_id,
+             opened_at,
+             synced_at,
+             meta
+           )
+           VALUES (?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             instrument_id = VALUES(instrument_id),
+             symbol = VALUES(symbol),
+             side = VALUES(side),
+             status = 'OPEN',
+             qty = VALUES(qty),
+             entry_price = VALUES(entry_price),
+             mark_price = VALUES(mark_price),
+             notional_usdt = VALUES(notional_usdt),
+             unrealized_pnl = VALUES(unrealized_pnl),
+             stop_loss_price = VALUES(stop_loss_price),
+             linked_position_id = VALUES(linked_position_id),
+             opened_at = VALUES(opened_at),
+             synced_at = VALUES(synced_at),
+             meta = VALUES(meta),
+             updated_at = CURRENT_TIMESTAMP(3)`,
+          [
+            randomUUID(),
+            position.exchange,
+            position.externalPositionId,
+            position.instrumentId,
+            normalizeSymbol(position.symbol),
+            position.side,
+            position.qty,
+            position.entryPrice,
+            position.markPrice,
+            position.notionalUsdt,
+            position.unrealizedPnl,
+            position.stopLossPrice,
+            position.linkedPositionId,
+            position.openedAt ? toMysqlDateTime(position.openedAt) : null,
+            toMysqlDateTime(position.syncedAt),
+            JSON.stringify(position.meta),
+          ]
+        );
+      }
+
+      const stale = existingOpen.filter(
+        (position) => !seenIds.has(position.external_position_id)
+      );
+
+      if (stale.length > 0) {
+        const placeholders = stale.map(() => '?').join(', ');
+        await execute(
+          client,
+          `UPDATE exchange_positions
+           SET status = 'CLOSED',
+               synced_at = ?,
+               updated_at = CURRENT_TIMESTAMP(3)
+           WHERE exchange = ?
+             AND external_position_id IN (${placeholders})`,
+          [
+            toMysqlDateTime(params.syncedAt),
+            params.exchange,
+            ...stale.map((position) => position.external_position_id),
+          ]
+        );
+      }
+
+      return {
+        openCount: params.positions.length,
+        linkedCount: params.positions.filter(
+          (position) => position.linkedPositionId !== null
+        ).length,
+        closedCount: stale.length,
+      };
+    });
   }
 
   async upsertPushSubscription(

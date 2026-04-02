@@ -115,14 +115,34 @@ type SymbolDraft = {
   pollIntervalMs: number;
 };
 
+type ManagedExchange = 'bybit' | 'okx';
+
+type ExchangeAccount = {
+  exchange: ManagedExchange;
+  apiKeyMask: string | null;
+  hasApiKey: boolean;
+  hasApiSecret: boolean;
+  hasApiPassphrase: boolean;
+  lastValidatedAt: string | null;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+};
+
+type ExchangeDraft = {
+  apiKey: string;
+  apiSecret: string;
+  apiPassphrase: string;
+};
+
 type SettingsClientProps = {
   apiUnavailable: boolean;
   vapidPublicKey: string;
+  exchangeAccounts: ExchangeAccount[];
   symbols: ApiSymbol[];
   defaults: SymbolDraft;
 };
 
-type SettingsTab = 'symbols' | 'pushes';
+type SettingsTab = 'symbols' | 'exchanges' | 'pushes';
 
 const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -171,6 +191,41 @@ const mapApiSymbolToDraft = (symbol: ApiSymbol): SymbolDraft => ({
   maxConsecutiveLosses: symbol.max_consecutive_losses,
   pollIntervalMs: symbol.poll_interval_ms,
 });
+
+const MANAGED_EXCHANGES: ManagedExchange[] = ['bybit', 'okx'];
+
+const EMPTY_EXCHANGE_DRAFT: ExchangeDraft = {
+  apiKey: '',
+  apiSecret: '',
+  apiPassphrase: '',
+};
+
+const buildExchangeAccounts = (
+  accounts: ExchangeAccount[]
+): Record<ManagedExchange, ExchangeAccount> =>
+  Object.fromEntries(
+    MANAGED_EXCHANGES.map((exchange) => [
+      exchange,
+      accounts.find((account) => account.exchange === exchange) ?? {
+        exchange,
+        apiKeyMask: null,
+        hasApiKey: false,
+        hasApiSecret: false,
+        hasApiPassphrase: false,
+        lastValidatedAt: null,
+        lastSyncAt: null,
+        lastSyncError: null,
+      },
+    ])
+  ) as Record<ManagedExchange, ExchangeAccount>;
+
+const formatTimestamp = (value: string | null): string =>
+  value
+    ? new Date(value).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : 'Never';
 
 const cloneDraft = (draft: SymbolDraft): SymbolDraft => ({ ...draft });
 
@@ -755,14 +810,163 @@ function SymbolEditor({
   );
 }
 
+type ExchangePanelProps = {
+  account: ExchangeAccount;
+  draft: ExchangeDraft;
+  saving: boolean;
+  status: string | undefined;
+  onChange: <TKey extends keyof ExchangeDraft>(
+    key: TKey,
+    value: ExchangeDraft[TKey]
+  ) => void;
+  onSave: () => void;
+  onSync: () => void;
+  onApplyStopLosses: () => void;
+};
+
+function ExchangePanel({
+  account,
+  draft,
+  saving,
+  status,
+  onChange,
+  onSave,
+  onSync,
+  onApplyStopLosses,
+}: ExchangePanelProps) {
+  return (
+    <section className="card exchange-panel">
+      <div className="settings-head">
+        <div>
+          <div className="eyebrow">Exchange Integration</div>
+          <h2>{account.exchange === 'bybit' ? 'Bybit' : 'OKX'}</h2>
+        </div>
+        <span
+          className={
+            account.hasApiKey && account.hasApiSecret
+              ? 'pill'
+              : 'pill pill-warn'
+          }
+        >
+          {account.hasApiKey && account.hasApiSecret
+            ? 'Credentials Stored'
+            : 'Credentials Missing'}
+        </span>
+      </div>
+
+      <div className="settings-section">
+        <h3>Credentials</h3>
+        <div className="field-grid">
+          <label className="field-stack">
+            <span>API Key</span>
+            <input
+              className="input"
+              onChange={(event) => onChange('apiKey', event.target.value)}
+              placeholder={account.apiKeyMask ?? 'Paste a new API key'}
+              value={draft.apiKey}
+            />
+          </label>
+          <label className="field-stack">
+            <span>API Secret</span>
+            <input
+              className="input"
+              onChange={(event) => onChange('apiSecret', event.target.value)}
+              placeholder={
+                account.hasApiSecret ? 'Stored. Enter to replace.' : 'Paste a new API secret'
+              }
+              type="password"
+              value={draft.apiSecret}
+            />
+          </label>
+          {account.exchange === 'okx' ? (
+            <label className="field-stack">
+              <span>Passphrase</span>
+              <input
+                className="input"
+                onChange={(event) =>
+                  onChange('apiPassphrase', event.target.value)
+                }
+                placeholder={
+                  account.hasApiPassphrase
+                    ? 'Stored. Enter to replace.'
+                    : 'Paste the OKX API passphrase'
+                }
+                type="password"
+                value={draft.apiPassphrase}
+              />
+            </label>
+          ) : null}
+        </div>
+        <div className="button-row">
+          <button
+            className="primary-button"
+            disabled={saving}
+            onClick={onSave}
+            type="button"
+          >
+            {saving ? 'Saving...' : 'Save Credentials'}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Position Sync</h3>
+        <div className="signal-grid">
+          <div className="signal-field">
+            <span className="signal-field-label">Last Validation</span>
+            <strong>{formatTimestamp(account.lastValidatedAt)}</strong>
+          </div>
+          <div className="signal-field">
+            <span className="signal-field-label">Last Position Sync</span>
+            <strong>{formatTimestamp(account.lastSyncAt)}</strong>
+          </div>
+          <div className="signal-field">
+            <span className="signal-field-label">Latest Result</span>
+            <strong>{account.lastSyncError ?? 'Healthy'}</strong>
+          </div>
+        </div>
+        <div className="button-row">
+          <button className="secondary-button" onClick={onSync} type="button">
+            Sync Open Positions
+          </button>
+          <button
+            className="secondary-button"
+            onClick={onApplyStopLosses}
+            type="button"
+          >
+            Apply Stop Losses
+          </button>
+        </div>
+      </div>
+
+      <p className="status-line">{status ?? ' '}</p>
+    </section>
+  );
+}
+
 export function SettingsClient({
   apiUnavailable,
   vapidPublicKey,
+  exchangeAccounts: initialExchangeAccounts,
   symbols: initialSymbols,
   defaults,
 }: SettingsClientProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('symbols');
   const [status, setStatus] = useState<string>('Idle');
+  const [exchangeAccounts, setExchangeAccounts] = useState<
+    Record<ManagedExchange, ExchangeAccount>
+  >(() => buildExchangeAccounts(initialExchangeAccounts));
+  const [exchangeDrafts, setExchangeDrafts] = useState<
+    Record<ManagedExchange, ExchangeDraft>
+  >({
+    bybit: { ...EMPTY_EXCHANGE_DRAFT },
+    okx: { ...EMPTY_EXCHANGE_DRAFT },
+  });
+  const [exchangeStatus, setExchangeStatus] = useState<
+    Partial<Record<ManagedExchange, string>>
+  >({});
+  const [exchangeSavingKey, setExchangeSavingKey] =
+    useState<ManagedExchange | null>(null);
   const [symbols, setSymbols] = useState<SymbolDraft[]>(
     sortBySymbol(initialSymbols.map(mapApiSymbolToDraft))
   );
@@ -906,6 +1110,127 @@ export function SettingsClient({
     }
   };
 
+  const updateExchangeDraft = <TKey extends keyof ExchangeDraft>(
+    exchange: ManagedExchange,
+    key: TKey,
+    value: ExchangeDraft[TKey]
+  ) => {
+    setExchangeDrafts((current) => ({
+      ...current,
+      [exchange]: {
+        ...current[exchange],
+        [key]: value,
+      },
+    }));
+  };
+
+  const saveExchangeAccount = async (exchange: ManagedExchange) => {
+    setExchangeSavingKey(exchange);
+
+    try {
+      const response = await fetch(`/api/settings/exchanges/${exchange}`, {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(exchangeDrafts[exchange]),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const payload = (await response.json()) as { account: ExchangeAccount };
+      setExchangeAccounts((current) => ({
+        ...current,
+        [exchange]: payload.account,
+      }));
+      setExchangeDrafts((current) => ({
+        ...current,
+        [exchange]: { ...EMPTY_EXCHANGE_DRAFT },
+      }));
+      setExchangeStatus((current) => ({
+        ...current,
+        [exchange]: 'Credentials saved.',
+      }));
+    } catch (error) {
+      setExchangeStatus((current) => ({
+        ...current,
+        [exchange]:
+          error instanceof Error ? error.message : 'Credential save failed.',
+      }));
+    } finally {
+      setExchangeSavingKey(null);
+    }
+  };
+
+  const runExchangeAction = async (
+    exchange: ManagedExchange,
+    action: 'sync-positions' | 'apply-stop-losses',
+    successMessage: (payload: {
+      syncedAt?: string | null;
+      validatedAt?: string | null;
+      summary?: { openCount?: number; linkedCount?: number; closedCount?: number };
+      updated?: number;
+    }) => string
+  ) => {
+    setExchangeSavingKey(exchange);
+
+    try {
+      const response = await fetch(
+        `/api/settings/exchanges/${exchange}/${action}`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const payload = (await response.json()) as {
+        syncedAt?: string | null;
+        validatedAt?: string | null;
+        summary?: { openCount?: number; linkedCount?: number; closedCount?: number };
+        updated?: number;
+      };
+
+      setExchangeAccounts((current) => ({
+        ...current,
+        [exchange]: {
+          ...current[exchange],
+          lastValidatedAt:
+            payload.validatedAt ?? payload.syncedAt ?? current[exchange].lastValidatedAt,
+          lastSyncAt: payload.syncedAt ?? current[exchange].lastSyncAt,
+          lastSyncError: null,
+        },
+      }));
+      setExchangeStatus((current) => ({
+        ...current,
+        [exchange]: successMessage(payload),
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Exchange action failed.';
+      setExchangeAccounts((current) => ({
+        ...current,
+        [exchange]: {
+          ...current[exchange],
+          lastSyncError: message,
+        },
+      }));
+      setExchangeStatus((current) => ({
+        ...current,
+        [exchange]: message,
+      }));
+    } finally {
+      setExchangeSavingKey(null);
+    }
+  };
+
   const subscribe = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       setStatus('Push notifications are not supported in this browser.');
@@ -1011,6 +1336,21 @@ export function SettingsClient({
             Symbols
           </button>
           <button
+            aria-controls="settings-panel-exchanges"
+            aria-selected={activeTab === 'exchanges'}
+            className={
+              activeTab === 'exchanges'
+                ? 'settings-tab settings-tab-active'
+                : 'settings-tab'
+            }
+            id="settings-tab-exchanges"
+            onClick={() => setActiveTab('exchanges')}
+            role="tab"
+            type="button"
+          >
+            Exchanges
+          </button>
+          <button
             aria-controls="settings-panel-pushes"
             aria-selected={activeTab === 'pushes'}
             className={
@@ -1029,7 +1369,9 @@ export function SettingsClient({
         <p className="muted">
           {activeTab === 'symbols'
             ? 'Symbols now own their exchange, strategy, execution, and risk settings directly in the database. Changes here are what the runner will use.'
-            : 'Approved signals across all symbols arrive as web push alerts.'}
+            : activeTab === 'exchanges'
+              ? 'Store Bybit and OKX credentials, import live positions, and push stop-loss protection to synced exchange positions.'
+              : 'Approved signals across all symbols arrive as web push alerts.'}
         </p>
         {apiUnavailable ? (
           <p className="status-line">
@@ -1143,6 +1485,48 @@ export function SettingsClient({
               </div>
             </div>
           ) : null}
+        </div>
+      ) : activeTab === 'exchanges' ? (
+        <div
+          aria-labelledby="settings-tab-exchanges"
+          className="stack-lg"
+          id="settings-panel-exchanges"
+          role="tabpanel"
+        >
+          {MANAGED_EXCHANGES.map((exchange) => (
+            <ExchangePanel
+              account={exchangeAccounts[exchange]}
+              draft={exchangeDrafts[exchange]}
+              key={exchange}
+              onApplyStopLosses={() =>
+                void runExchangeAction(
+                  exchange,
+                  'apply-stop-losses',
+                  (payload) =>
+                    payload.updated
+                      ? `Stop losses pushed for ${payload.updated} position${payload.updated === 1 ? '' : 's'}.`
+                      : 'No matching live positions needed updates.'
+                )
+              }
+              onChange={(key, value) =>
+                updateExchangeDraft(exchange, key, value)
+              }
+              onSave={() => void saveExchangeAccount(exchange)}
+              onSync={() =>
+                void runExchangeAction(
+                  exchange,
+                  'sync-positions',
+                  (payload) => {
+                    const openCount = payload.summary?.openCount ?? 0;
+                    const linkedCount = payload.summary?.linkedCount ?? 0;
+                    return `Synced ${openCount} open position${openCount === 1 ? '' : 's'}${linkedCount > 0 ? `, ${linkedCount} linked to app positions` : ''}.`;
+                  }
+                )
+              }
+              saving={exchangeSavingKey === exchange}
+              status={exchangeStatus[exchange]}
+            />
+          ))}
         </div>
       ) : (
         <section

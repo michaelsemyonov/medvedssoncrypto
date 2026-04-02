@@ -10,6 +10,7 @@ import {
   loadConfig,
   normalizeSymbol,
   parseCookieHeader,
+  round,
   resolveMaxOpenPositions,
   SESSION_COOKIE_NAME,
   type ExchangeName,
@@ -20,6 +21,14 @@ import {
 import Fastify from 'fastify';
 import pino from 'pino';
 import { z } from 'zod';
+
+import {
+  buildCredentialUpdate,
+  buildMaskedExchangeAccount,
+  createExchangeClient,
+  decryptSecret,
+  type ManagedExchange,
+} from './exchange-integrations.ts';
 
 const paginationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
@@ -32,6 +41,7 @@ const POSITION_CHART_TIMEFRAME: Timeframe = '15m';
 const DASHBOARD_TIME_ZONE = 'Europe/Stockholm';
 const marketDataExchangeSchema = z.enum(['bybit', 'binance', 'okx']);
 const brokerSchema = z.enum(['bybit', 'okx']);
+const managedExchangeSchema = z.enum(['bybit', 'okx']);
 
 const symbolUpdateSchema = z.object({
   exchange: marketDataExchangeSchema.default('bybit'),
@@ -84,6 +94,16 @@ const symbolSettingsSchema = z.object({
 
 const symbolIdParamsSchema = z.object({
   id: z.string().min(1),
+});
+
+const exchangeParamsSchema = z.object({
+  exchange: managedExchangeSchema,
+});
+
+const exchangeCredentialsSchema = z.object({
+  apiKey: z.string().default(''),
+  apiSecret: z.string().default(''),
+  apiPassphrase: z.string().default(''),
 });
 
 const pushSubscribeSchema = z.object({
@@ -257,6 +277,174 @@ export const buildApp = async () => {
       0
     );
   };
+  const getExchangeCredentials = async (
+    exchange: ManagedExchange
+  ): Promise<{
+    account: Awaited<ReturnType<typeof db.getExchangeAccount>>;
+    client: ReturnType<typeof createExchangeClient>;
+  }> => {
+    const account = await db.getExchangeAccount(exchange);
+
+    if (
+      !account?.api_key_ciphertext ||
+      !account.api_secret_ciphertext ||
+      !account.has_api_key ||
+      !account.has_api_secret
+    ) {
+      throw new Error(`${exchange.toUpperCase()} credentials are not configured.`);
+    }
+
+    const credentials = {
+      exchange,
+      apiKey: decryptSecret(
+        account.api_key_ciphertext,
+        config.auth.sessionSecret
+      ),
+      apiSecret: decryptSecret(
+        account.api_secret_ciphertext,
+        config.auth.sessionSecret
+      ),
+      apiPassphrase:
+        exchange === 'okx'
+          ? account.api_passphrase_ciphertext
+            ? decryptSecret(
+                account.api_passphrase_ciphertext,
+                config.auth.sessionSecret
+              )
+            : null
+          : null,
+    };
+
+    return {
+      account,
+      client: createExchangeClient(credentials),
+    };
+  };
+  const syncManagedExchangePositions = async (exchange: ManagedExchange) => {
+    const { client } = await getExchangeCredentials(exchange);
+    const validatedAt = new Date().toISOString();
+    await client.validate();
+    const importedPositions = await client.listOpenPositions();
+    const activeRun = await db.getActiveRun();
+    const appPositions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
+    const appPositionMap = new Map<string, string>();
+
+    for (const position of appPositions) {
+      const key = `${position.broker}:${position.symbol}:${position.side}`;
+
+      if (!appPositionMap.has(key)) {
+        appPositionMap.set(key, position.id);
+      }
+    }
+
+    const syncedAt = new Date().toISOString();
+    const syncSummary = await db.syncExchangePositions({
+      exchange,
+      syncedAt,
+      positions: importedPositions.map((position) => ({
+        exchange: position.exchange,
+        externalPositionId: position.externalPositionId,
+        instrumentId: position.instrumentId,
+        symbol: position.symbol,
+        side: position.side,
+        qty: position.qty,
+        entryPrice: position.entryPrice,
+        markPrice: position.markPrice,
+        notionalUsdt: position.notionalUsdt,
+        unrealizedPnl: position.unrealizedPnl,
+        stopLossPrice: position.stopLossPrice,
+        linkedPositionId:
+          appPositionMap.get(
+            `${position.exchange}:${position.symbol}:${position.side}`
+          ) ?? null,
+        openedAt: position.openedAt,
+        syncedAt,
+        meta: position.meta,
+      })),
+    });
+
+    await db.updateExchangeAccountSyncStatus({
+      exchange,
+      validatedAt,
+      syncedAt,
+      syncError: null,
+    });
+
+    return {
+      positions: importedPositions,
+      summary: syncSummary,
+      syncedAt,
+    };
+  };
+  const getUnifiedOpenPositions = async (): Promise<
+    Array<
+      Awaited<ReturnType<typeof db.getOpenPositions>>[number] & {
+        position_source: 'simulated' | 'exchange';
+        linked_position_id: string | null;
+        stop_loss_price: number | null;
+        last_synced_at: string | null;
+        supports_trailing: boolean;
+      }
+    >
+  > => {
+    const activeRun = await db.getActiveRun();
+    const appPositions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
+    const exchangePositions = await db.listOpenExchangePositions();
+
+    const unified = [
+      ...appPositions.map((position) => ({
+        ...position,
+        position_source: 'simulated' as const,
+        linked_position_id: null,
+        stop_loss_price: null,
+        last_synced_at: null,
+        supports_trailing: true,
+      })),
+      ...exchangePositions.map((position) => ({
+        id: position.id,
+        strategy_run_id: '',
+        symbol_id: '',
+        broker: position.exchange,
+        is_counter_position: false,
+        side: position.side,
+        status: position.status,
+        entry_time: position.opened_at ?? position.synced_at,
+        exit_time: null,
+        entry_price: position.entry_price,
+        exit_price: null,
+        qty: position.qty,
+        notional_usdt: position.notional_usdt,
+        entry_fee: 0,
+        exit_fee: null,
+        realized_pnl: null,
+        opened_by_signal_id: '',
+        closed_by_signal_id: null,
+        created_at: position.created_at,
+        updated_at: position.updated_at,
+        symbol: position.symbol,
+        unrealized_pnl: position.unrealized_pnl,
+        trailing_profile: 'external',
+        trailing_enabled: false,
+        trailing_activation_profit_pct: 0,
+        trailing_giveback_ratio: 0,
+        trailing_giveback_min_pct: 0,
+        trailing_giveback_max_pct: 0,
+        trailing_min_locked_profit_pct: 0,
+        trailing_armed: false,
+        trailing_current_profit_pct: null,
+        trailing_peak_profit_pct: null,
+        trailing_giveback_pct: null,
+        trailing_allowed_giveback_pct: null,
+        position_source: 'exchange' as const,
+        linked_position_id: position.linked_position_id,
+        stop_loss_price: position.stop_loss_price,
+        last_synced_at: position.synced_at.toISOString(),
+        supports_trailing: false,
+      })),
+    ];
+
+    return unified.sort((left, right) => left.symbol.localeCompare(right.symbol));
+  };
   const notifications = new NotificationService(config, db, logger, () => {
     notificationFailuresCounter.inc();
   });
@@ -364,6 +552,129 @@ export const buildApp = async () => {
     };
   });
 
+  app.put('/exchange-accounts/:exchange', async (request) => {
+    const params = parseOrReply(exchangeParamsSchema, request.params);
+    const body = parseOrReply(exchangeCredentialsSchema, request.body);
+    const existing = await db.getExchangeAccount(params.exchange);
+    const updated = buildCredentialUpdate({
+      exchange: params.exchange,
+      apiKey: body.apiKey,
+      apiSecret: body.apiSecret,
+      apiPassphrase: body.apiPassphrase,
+      existing,
+      encryptionSecret: config.auth.sessionSecret,
+    });
+
+    await db.upsertExchangeAccount({
+      exchange: params.exchange,
+      apiKeyCiphertext: updated.apiKeyCiphertext,
+      apiSecretCiphertext: updated.apiSecretCiphertext,
+      apiPassphraseCiphertext: updated.apiPassphraseCiphertext,
+      apiKeyMask: updated.apiKeyMask,
+      hasApiKey: updated.hasApiKey,
+      hasApiSecret: updated.hasApiSecret,
+      hasApiPassphrase: updated.hasApiPassphrase,
+      lastValidatedAt: existing?.last_validated_at?.toISOString() ?? null,
+      lastSyncAt: existing?.last_sync_at?.toISOString() ?? null,
+      lastSyncError: existing?.last_sync_error ?? null,
+    });
+
+    return {
+      account: buildMaskedExchangeAccount({
+        exchange: params.exchange,
+        apiKeyMask: updated.apiKeyMask,
+        hasApiKey: updated.hasApiKey,
+        hasApiSecret: updated.hasApiSecret,
+        hasApiPassphrase: updated.hasApiPassphrase,
+        lastValidatedAt: existing?.last_validated_at ?? null,
+        lastSyncAt: existing?.last_sync_at ?? null,
+        lastSyncError: existing?.last_sync_error ?? null,
+      }),
+    };
+  });
+
+  app.post('/exchange-accounts/:exchange/sync-positions', async (request) => {
+    const params = parseOrReply(exchangeParamsSchema, request.params);
+
+    try {
+      const result = await syncManagedExchangePositions(params.exchange);
+      return {
+        validatedAt: result.syncedAt,
+        syncedAt: result.syncedAt,
+        summary: result.summary,
+        positions: result.positions.length,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Exchange sync failed.';
+      await db.updateExchangeAccountSyncStatus({
+        exchange: params.exchange,
+        syncError: message,
+      });
+      throw error;
+    }
+  });
+
+  app.post('/exchange-accounts/:exchange/apply-stop-losses', async (request) => {
+    const params = parseOrReply(exchangeParamsSchema, request.params);
+
+    try {
+      const { client } = await getExchangeCredentials(params.exchange);
+      const validatedAt = new Date().toISOString();
+      await client.validate();
+
+      const synced = await syncManagedExchangePositions(params.exchange);
+      const symbols = await db.listSymbols();
+      const symbolSettings = new Map(
+        symbols.map((symbol) => [symbol.symbol, symbol])
+      );
+      let updatedCount = 0;
+
+      for (const position of synced.positions) {
+        const symbol = symbolSettings.get(position.symbol);
+
+        if (!symbol || symbol.position_broker !== params.exchange) {
+          continue;
+        }
+
+        if (symbol.stop_loss_pct <= 0) {
+          continue;
+        }
+
+        const stopLossPrice =
+          position.side === 'LONG'
+            ? round(position.entryPrice * (1 - symbol.stop_loss_pct / 100), 8)
+            : round(position.entryPrice * (1 + symbol.stop_loss_pct / 100), 8);
+
+        await client.applyStopLoss(position, stopLossPrice);
+        updatedCount += 1;
+      }
+
+      const refreshed = await syncManagedExchangePositions(params.exchange);
+      await db.updateExchangeAccountSyncStatus({
+        exchange: params.exchange,
+        validatedAt,
+        syncedAt: refreshed.syncedAt,
+        syncError: null,
+      });
+
+      return {
+        validatedAt,
+        syncedAt: refreshed.syncedAt,
+        summary: refreshed.summary,
+        updated: updatedCount,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Stop-loss update failed.';
+      await db.updateExchangeAccountSyncStatus({
+        exchange: params.exchange,
+        syncError: message,
+      });
+      throw error;
+    }
+  });
+
   app.get('/signals/recent', async (request) => {
     const query = parseOrReply(paginationQuerySchema, request.query);
     return {
@@ -373,14 +684,8 @@ export const buildApp = async () => {
   });
 
   app.get('/positions/open', async () => {
-    const run = await db.getActiveRun();
-
-    if (!run) {
-      return { positions: [] };
-    }
-
     return {
-      positions: await db.getOpenPositions(run.id),
+      positions: await getUnifiedOpenPositions(),
     };
   });
 
@@ -480,7 +785,7 @@ export const buildApp = async () => {
     };
   });
 
-  app.get('/runner-status', async () => ({
+  app.get('/runner-status', () => ({
     runner: runner.getStatus(),
   }));
 
@@ -497,45 +802,45 @@ export const buildApp = async () => {
   });
 
   app.get('/positions', async () => {
-    const run = await db.getActiveRun();
-
-    if (!run) {
-      return {
-        positions: [],
-      };
-    }
-
     return {
-      positions: await db.getOpenPositions(run.id),
+      positions: await getUnifiedOpenPositions(),
     };
   });
 
   app.get('/positions/:id/candles', async (request) => {
     const params = parseOrReply(symbolIdParamsSchema, request.params);
     const run = await db.getActiveRun();
+    const appPosition = run
+      ? (await db.getOpenPositions(run.id)).find((item) => item.id === params.id)
+      : null;
+    const exchangePosition = appPosition
+      ? null
+      : await db.getExchangePositionById(params.id);
 
-    if (!run) {
+    if (!appPosition && !exchangePosition) {
       return {
         recent_candles: [],
       };
     }
 
-    const position = (await db.getOpenPositions(run.id)).find(
-      (item) => item.id === params.id
-    );
-
-    if (!position) {
-      return {
-        recent_candles: [],
-      };
-    }
-
-    const symbol = await db.getSymbolById(position.symbol_id);
+    const trackedSymbol = appPosition?.symbol ?? exchangePosition?.symbol ?? '';
+    const symbol =
+      appPosition && appPosition.symbol_id
+        ? await db.getSymbolById(appPosition.symbol_id)
+        : (await db.listSymbols()).find(
+            (item) =>
+              item.symbol === trackedSymbol &&
+              (item.position_broker === exchangePosition?.exchange ||
+                item.exchange === exchangePosition?.exchange)
+          ) ?? null;
 
     try {
       return {
         recent_candles: await getMarketDataAdapter({
-          exchange: symbol?.exchange ?? config.defaultSymbolSettings.exchange,
+          exchange:
+            symbol?.exchange ??
+            exchangePosition?.exchange ??
+            config.defaultSymbolSettings.exchange,
           exchangeTimeoutMs:
             symbol?.exchange_timeout_ms ??
             config.defaultSymbolSettings.exchangeTimeoutMs,
@@ -543,7 +848,7 @@ export const buildApp = async () => {
             symbol?.exchange_rate_limit_ms ??
             config.defaultSymbolSettings.exchangeRateLimitMs,
         }).fetchRecentCandles(
-          position.symbol,
+          trackedSymbol,
           POSITION_CHART_TIMEFRAME,
           POSITION_CHART_CANDLE_COUNT
         ),
@@ -552,8 +857,8 @@ export const buildApp = async () => {
       request.log.warn(
         {
           err: error,
-          positionId: position.id,
-          symbol: position.symbol,
+          positionId: params.id,
+          symbol: trackedSymbol,
           timeframe: POSITION_CHART_TIMEFRAME,
         },
         'Open position chart candle fetch failed.'
@@ -575,16 +880,32 @@ export const buildApp = async () => {
 
   app.get('/settings', async () => {
     const symbols = await db.listSymbols();
+    const exchangeAccounts = await db.listExchangeAccounts();
 
     return {
       vapidPublicKey: config.webPushVapidPublicKey,
       symbols,
+      exchangeAccounts: exchangeAccounts.map((account) =>
+        buildMaskedExchangeAccount({
+          exchange: account.exchange,
+          apiKeyMask: account.api_key_mask,
+          hasApiKey: account.has_api_key,
+          hasApiSecret: account.has_api_secret,
+          hasApiPassphrase: account.has_api_passphrase,
+          lastValidatedAt: account.last_validated_at,
+          lastSyncAt: account.last_sync_at,
+          lastSyncError: account.last_sync_error,
+        })
+      ),
       defaults: {
         symbol: '',
         active: true,
         exchange: config.defaultSymbolSettings.exchange,
         exchangeTimeoutMs: config.defaultSymbolSettings.exchangeTimeoutMs,
         exchangeRateLimitMs: config.defaultSymbolSettings.exchangeRateLimitMs,
+        positionBroker: config.defaultSymbolSettings.positionBroker,
+        counterPositionBroker:
+          config.defaultSymbolSettings.counterPositionBroker,
         timeframe: config.defaultSymbolSettings.timeframe,
         dryRun: config.defaultSymbolSettings.dryRun,
         allowShort: config.defaultSymbolSettings.allowShort,
