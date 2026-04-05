@@ -1,5 +1,8 @@
+import { Space } from 'antd';
+
 import { formatDateTime } from '@/lib/datetime.ts';
 import { getApiBaseUrl, getSessionToken } from '@/lib/api.ts';
+import { StatusTag } from '@/components/ui-primitives.tsx';
 
 type RunnerStatusResponse = {
   runner: {
@@ -34,18 +37,12 @@ export async function HeaderRunnerStatus() {
       : 'not yet completed';
 
     return (
-      <div className="hero-status" aria-live="polite">
-        <span
-          className={
-            data.runner.running
-              ? 'hero-status-pill hero-status-pill-live'
-              : 'hero-status-pill hero-status-pill-stopped'
-          }
-        >
+      <Space aria-live="polite" className="hero-status" size={10}>
+        <StatusTag tone={data.runner.running ? 'success' : 'danger'}>
           {data.runner.running ? 'Live' : 'Stopped'}
-        </span>
+        </StatusTag>
         <span className="hero-status-text">Last tick {lastTick}</span>
-      </div>
+      </Space>
     );
   } catch {
     return null;

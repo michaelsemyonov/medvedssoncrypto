@@ -1,16 +1,12 @@
 import type { Metadata, Viewport } from 'next';
+import { AntdRegistry } from '@ant-design/nextjs-registry';
+import { Card } from 'antd';
 import { IBM_Plex_Mono, Space_Grotesk } from 'next/font/google';
-import Link from 'next/link';
 
-import {
-  DashboardIcon,
-  PositionsIcon,
-  SettingsIcon,
-  SignalsIcon,
-  TradesIcon,
-} from '@/components/header-icons.tsx';
+import { AntdProvider } from '@/components/antd-provider.tsx';
 import { HeaderRunnerStatus } from '@/components/header-runner-status.tsx';
-import { HeaderSignOutButton } from '@/components/header-signout-button.tsx';
+import { ShellNav } from '@/components/shell-nav.tsx';
+import { Eyebrow } from '@/components/ui-primitives.tsx';
 import { ServiceWorkerRegister } from '@/components/service-worker-register.tsx';
 import './globals.css';
 
@@ -47,49 +43,23 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} ${ibmPlexMono.variable}`}>
-        <ServiceWorkerRegister />
-        <main className="shell">
-          <section className="hero">
-            <div className="hero-heading">
-              <div className="eyebrow">MedvedssonCrypto</div>
-              <HeaderRunnerStatus />
-            </div>
-            <nav className="hero-nav">
-              <Link className="hero-link" href="/">
-                <span className="hero-link-content">
-                  <DashboardIcon className="hero-link-icon" />
-                  <span>Dashboard</span>
-                </span>
-              </Link>
-              <Link className="hero-link" href="/signals">
-                <span className="hero-link-content">
-                  <SignalsIcon className="hero-link-icon" />
-                  <span>Signals</span>
-                </span>
-              </Link>
-              <Link className="hero-link" href="/positions">
-                <span className="hero-link-content">
-                  <PositionsIcon className="hero-link-icon" />
-                  <span>Positions</span>
-                </span>
-              </Link>
-              <Link className="hero-link" href="/trades">
-                <span className="hero-link-content">
-                  <TradesIcon className="hero-link-icon" />
-                  <span>Trades</span>
-                </span>
-              </Link>
-              <Link className="hero-link" href="/settings">
-                <span className="hero-link-content">
-                  <SettingsIcon className="hero-link-icon" />
-                  <span>Settings</span>
-                </span>
-              </Link>
-              <HeaderSignOutButton />
-            </nav>
-          </section>
-          {children}
-        </main>
+        <AntdRegistry>
+          <AntdProvider>
+            <ServiceWorkerRegister />
+            <main className="shell">
+              <Card className="hero-card" styles={{ body: { padding: 0 } }}>
+                <div className="hero">
+                  <div className="hero-heading">
+                    <Eyebrow>MedvedssonCrypto</Eyebrow>
+                    <HeaderRunnerStatus />
+                  </div>
+                  <ShellNav />
+                </div>
+              </Card>
+              {children}
+            </main>
+          </AntdProvider>
+        </AntdRegistry>
       </body>
     </html>
   );

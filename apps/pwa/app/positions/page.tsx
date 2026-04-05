@@ -1,9 +1,11 @@
 import { Suspense } from 'react';
+import { Alert, Card, Collapse, Descriptions, Empty, Space } from 'antd';
 
 import { CandleChart } from '@/components/candle-chart.tsx';
 import { ExchangeBadge } from '@/components/exchange-badge.tsx';
 import { fetchApiWithFallback } from '@/lib/api.ts';
 import { formatDateTime } from '@/lib/datetime.ts';
+import { Eyebrow, StatusTag } from '@/components/ui-primitives.tsx';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,9 +52,6 @@ const formatSignedValue = (value: number | null): string =>
 
 const formatUsdtValue = (value: number): string => `${value.toFixed(2)} USDT`;
 
-const getSideClassName = (side: PositionPageItem['side']): string =>
-  side === 'LONG' ? 'pill' : 'pill pill-warn';
-
 const formatProfileLabel = (profile: string): string => {
   const labels: Record<string, string> = {
     conservative: 'Conservative',
@@ -97,38 +96,47 @@ const getTrailingTakeProfitRate = (
 
 function PositionOverviewTable({ position }: { position: PositionPageItem }) {
   return (
-    <div className="signal-grid">
-      <div className="signal-field">
-        <span className="signal-field-label">Entry Time</span>
-        <strong>{formatDateTime(position.entry_time)}</strong>
-      </div>
-      <div className="signal-field">
-        <span className="signal-field-label">Entry Price</span>
-        <strong>{position.entry_price.toFixed(4)}</strong>
-      </div>
-      <div className="signal-field">
-        <span className="signal-field-label">Qty</span>
-        <strong>{position.qty.toFixed(6)}</strong>
-      </div>
-      <div className="signal-field">
-        <span className="signal-field-label">Amount</span>
-        <strong>{formatUsdtValue(position.notional_usdt)}</strong>
-      </div>
-      <div className="signal-field">
-        <span className="signal-field-label">Unrealized PnL</span>
-        <strong>{formatSignedValue(position.unrealized_pnl)}</strong>
-      </div>
-      <div className="signal-field">
-        <span className="signal-field-label">Position Type</span>
-        <strong>{position.is_counter_position ? 'Counter' : 'Primary'}</strong>
-      </div>
-      <div className="signal-field">
-        <span className="signal-field-label">Exchange</span>
-        <strong className="position-field-badge">
-          <ExchangeBadge exchange={position.broker} />
-        </strong>
-      </div>
-    </div>
+    <Descriptions
+      className="signal-descriptions"
+      column={{ lg: 3, md: 2, sm: 1, xs: 1 }}
+      items={[
+        {
+          key: 'entryTime',
+          label: 'Entry Time',
+          children: formatDateTime(position.entry_time),
+        },
+        {
+          key: 'entryPrice',
+          label: 'Entry Price',
+          children: position.entry_price.toFixed(4),
+        },
+        {
+          key: 'qty',
+          label: 'Qty',
+          children: position.qty.toFixed(6),
+        },
+        {
+          key: 'amount',
+          label: 'Amount',
+          children: formatUsdtValue(position.notional_usdt),
+        },
+        {
+          key: 'unrealized',
+          label: 'Unrealized PnL',
+          children: formatSignedValue(position.unrealized_pnl),
+        },
+        {
+          key: 'type',
+          label: 'Position Type',
+          children: position.is_counter_position ? 'Counter' : 'Primary',
+        },
+        {
+          key: 'exchange',
+          label: 'Exchange',
+          children: <ExchangeBadge exchange={position.broker} />,
+        },
+      ]}
+    />
   );
 }
 
@@ -191,96 +199,123 @@ function TrailingDetails({ position }: { position: PositionPageItem }) {
   const trailingTakeProfitRate = getTrailingTakeProfitRate(position);
 
   return (
-    <details className="position-subcard">
-      <summary className="position-subsummary">
-        <span className="position-subhead">
-          <h4>Trailing Profit</h4>
-          {!position.trailing_enabled ? (
-            <span className="pill pill-warn">Disabled</span>
-          ) : armed ? (
-            <span className="pill">Armed</span>
-          ) : (
-            <span className="pill pill-warn">Not Armed</span>
-          )}
-        </span>
-        <span className="position-subsummary-values">
-          <span className="trade-summary-value">
-            <span className="trade-summary-label">Profile</span>
-            <strong>{formatProfileLabel(position.trailing_profile)}</strong>
-          </span>
-          <span className="trade-summary-value">
-            <span className="trade-summary-label">Peak Profit</span>
-            <strong>{formatSignedPct(position.trailing_peak_profit_pct)}</strong>
-          </span>
-          <span className="trade-summary-value">
-            <span className="trade-summary-label">Status</span>
-            <strong>{statusLabel}</strong>
-          </span>
-        </span>
-      </summary>
-      <div className="position-table-wrap">
-        <table className="position-info-table position-info-table-compact">
-          <tbody>
-            <tr>
-              <th scope="row">Status</th>
-              <td>{statusLabel}</td>
-            </tr>
-            <tr>
-              <th scope="row">Profile</th>
-              <td>{formatProfileLabel(position.trailing_profile)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Current Profit</th>
-              <td>{formatSignedPct(position.trailing_current_profit_pct)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Peak Profit</th>
-              <td>{formatSignedPct(position.trailing_peak_profit_pct)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Giveback</th>
-              <td>
-                {position.trailing_giveback_pct !== null
-                  ? formatPct(position.trailing_giveback_pct)
-                  : 'n/a'}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">Allowed Giveback</th>
-              <td>
-                {position.trailing_allowed_giveback_pct !== null
-                  ? formatPct(position.trailing_allowed_giveback_pct)
-                  : 'n/a'}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">Take-Profit Rate Now</th>
-              <td>{formatRate(trailingTakeProfitRate)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Activation Threshold</th>
-              <td>{formatPct(position.trailing_activation_profit_pct)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Giveback Ratio</th>
-              <td>{formatRatio(position.trailing_giveback_ratio)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Giveback Min</th>
-              <td>{formatPct(position.trailing_giveback_min_pct)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Giveback Max</th>
-              <td>{formatPct(position.trailing_giveback_max_pct)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Min Locked Profit</th>
-              <td>{formatPct(position.trailing_min_locked_profit_pct)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </details>
+    <Collapse
+      className="detail-collapse"
+      items={[
+        {
+          key: 'trailing-profit',
+          label: (
+            <div className="position-subsummary">
+              <div className="position-subhead">
+                <h4>Trailing Profit</h4>
+                <StatusTag
+                  tone={
+                    !position.trailing_enabled || !armed ? 'warning' : 'success'
+                  }
+                >
+                  {!position.trailing_enabled
+                    ? 'Disabled'
+                    : armed
+                      ? 'Armed'
+                      : 'Not Armed'}
+                </StatusTag>
+              </div>
+              <Space className="position-subsummary-values" size={16} wrap>
+                <span className="trade-summary-value">
+                  <span className="trade-summary-label">Profile</span>
+                  <strong>
+                    {formatProfileLabel(position.trailing_profile)}
+                  </strong>
+                </span>
+                <span className="trade-summary-value">
+                  <span className="trade-summary-label">Peak Profit</span>
+                  <strong>
+                    {formatSignedPct(position.trailing_peak_profit_pct)}
+                  </strong>
+                </span>
+                <span className="trade-summary-value">
+                  <span className="trade-summary-label">Status</span>
+                  <strong>{statusLabel}</strong>
+                </span>
+              </Space>
+            </div>
+          ),
+          children: (
+            <Descriptions
+              bordered
+              className="compact-descriptions"
+              column={1}
+              items={[
+                { key: 'status', label: 'Status', children: statusLabel },
+                {
+                  key: 'profile',
+                  label: 'Profile',
+                  children: formatProfileLabel(position.trailing_profile),
+                },
+                {
+                  key: 'current',
+                  label: 'Current Profit',
+                  children: formatSignedPct(
+                    position.trailing_current_profit_pct
+                  ),
+                },
+                {
+                  key: 'peak',
+                  label: 'Peak Profit',
+                  children: formatSignedPct(position.trailing_peak_profit_pct),
+                },
+                {
+                  key: 'giveback',
+                  label: 'Giveback',
+                  children:
+                    position.trailing_giveback_pct !== null
+                      ? formatPct(position.trailing_giveback_pct)
+                      : 'n/a',
+                },
+                {
+                  key: 'allowed',
+                  label: 'Allowed Giveback',
+                  children:
+                    position.trailing_allowed_giveback_pct !== null
+                      ? formatPct(position.trailing_allowed_giveback_pct)
+                      : 'n/a',
+                },
+                {
+                  key: 'takeProfit',
+                  label: 'Take-Profit Rate Now',
+                  children: formatRate(trailingTakeProfitRate),
+                },
+                {
+                  key: 'activation',
+                  label: 'Activation Threshold',
+                  children: formatPct(position.trailing_activation_profit_pct),
+                },
+                {
+                  key: 'ratio',
+                  label: 'Giveback Ratio',
+                  children: formatRatio(position.trailing_giveback_ratio),
+                },
+                {
+                  key: 'min',
+                  label: 'Giveback Min',
+                  children: formatPct(position.trailing_giveback_min_pct),
+                },
+                {
+                  key: 'max',
+                  label: 'Giveback Max',
+                  children: formatPct(position.trailing_giveback_max_pct),
+                },
+                {
+                  key: 'locked',
+                  label: 'Min Locked Profit',
+                  children: formatPct(position.trailing_min_locked_profit_pct),
+                },
+              ]}
+            />
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -290,62 +325,81 @@ function ExchangeProtectionDetails({
   position: PositionPageItem;
 }) {
   return (
-    <details className="position-subcard">
-      <summary className="position-subsummary">
-        <span className="position-subhead">
-          <h4>Exchange Protection</h4>
-          {position.stop_loss_price !== null ? (
-            <span className="pill">Stop Loss Active</span>
-          ) : (
-            <span className="pill pill-warn">Stop Loss Missing</span>
-          )}
-        </span>
-        <span className="position-subsummary-values">
-          <span className="trade-summary-value">
-            <span className="trade-summary-label">Source</span>
-            <strong>Exchange Sync</strong>
-          </span>
-          <span className="trade-summary-value">
-            <span className="trade-summary-label">Stop Loss</span>
-            <strong>{formatRate(position.stop_loss_price)}</strong>
-          </span>
-          <span className="trade-summary-value">
-            <span className="trade-summary-label">Last Sync</span>
-            <strong>
-              {position.last_synced_at
-                ? formatDateTime(position.last_synced_at)
-                : 'n/a'}
-            </strong>
-          </span>
-        </span>
-      </summary>
-      <div className="position-table-wrap">
-        <table className="position-info-table position-info-table-compact">
-          <tbody>
-            <tr>
-              <th scope="row">Position Source</th>
-              <td>Imported from exchange</td>
-            </tr>
-            <tr>
-              <th scope="row">Stop Loss</th>
-              <td>{formatRate(position.stop_loss_price)}</td>
-            </tr>
-            <tr>
-              <th scope="row">Last Synced</th>
-              <td>
-                {position.last_synced_at
-                  ? formatDateTime(position.last_synced_at)
-                  : 'n/a'}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">Linked App Position</th>
-              <td>{position.linked_position_id ? 'Matched' : 'Not linked'}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </details>
+    <Collapse
+      className="detail-collapse"
+      items={[
+        {
+          key: 'exchange-protection',
+          label: (
+            <div className="position-subsummary">
+              <div className="position-subhead">
+                <h4>Exchange Protection</h4>
+                <StatusTag
+                  tone={
+                    position.stop_loss_price !== null ? 'success' : 'warning'
+                  }
+                >
+                  {position.stop_loss_price !== null
+                    ? 'Stop Loss Active'
+                    : 'Stop Loss Missing'}
+                </StatusTag>
+              </div>
+              <Space className="position-subsummary-values" size={16} wrap>
+                <span className="trade-summary-value">
+                  <span className="trade-summary-label">Source</span>
+                  <strong>Exchange Sync</strong>
+                </span>
+                <span className="trade-summary-value">
+                  <span className="trade-summary-label">Stop Loss</span>
+                  <strong>{formatRate(position.stop_loss_price)}</strong>
+                </span>
+                <span className="trade-summary-value">
+                  <span className="trade-summary-label">Last Sync</span>
+                  <strong>
+                    {position.last_synced_at
+                      ? formatDateTime(position.last_synced_at)
+                      : 'n/a'}
+                  </strong>
+                </span>
+              </Space>
+            </div>
+          ),
+          children: (
+            <Descriptions
+              bordered
+              className="compact-descriptions"
+              column={1}
+              items={[
+                {
+                  key: 'source',
+                  label: 'Position Source',
+                  children: 'Imported from exchange',
+                },
+                {
+                  key: 'stopLoss',
+                  label: 'Stop Loss',
+                  children: formatRate(position.stop_loss_price),
+                },
+                {
+                  key: 'lastSynced',
+                  label: 'Last Synced',
+                  children: position.last_synced_at
+                    ? formatDateTime(position.last_synced_at)
+                    : 'n/a',
+                },
+                {
+                  key: 'linked',
+                  label: 'Linked App Position',
+                  children: position.linked_position_id
+                    ? 'Matched'
+                    : 'Not linked',
+                },
+              ]}
+            />
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -357,59 +411,71 @@ export default async function PositionsPage() {
   });
 
   return (
-    <section className="card">
+    <Card className="surface-card" styles={{ body: { padding: 20 } }}>
       <h2>Open Positions</h2>
       {unavailable ? (
-        <p className="status-line">
-          Position data is temporarily unavailable while the backend API
-          reconnects.
-        </p>
+        <Alert
+          description="Position data is temporarily unavailable while the backend API reconnects."
+          showIcon
+          type="warning"
+        />
       ) : null}
       {data.positions.length === 0 ? (
-        <p className="muted">No open position data is available right now.</p>
+        <Empty
+          description="No open position data is available right now."
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       ) : (
         <div className="position-list">
           {data.positions.map((position) => (
-            <article className="position-card" key={position.id}>
-              <div className="signal-summary">
-                <div className="signal-head">
-                  <div>
-                    <p className="eyebrow">Open Position</p>
-                    <div className="position-title-row">
-                      <h3 className="signal-symbol">{position.symbol}</h3>
-                      <ExchangeBadge compact exchange={position.broker} />
+            <Card
+              className="surface-card"
+              key={position.id}
+              styles={{ body: { padding: 18 } }}
+            >
+              <div className="position-card">
+                <div className="signal-summary">
+                  <div className="signal-head">
+                    <div>
+                      <Eyebrow>Open Position</Eyebrow>
+                      <div className="position-title-row">
+                        <h3 className="signal-symbol">{position.symbol}</h3>
+                        <ExchangeBadge compact exchange={position.broker} />
+                      </div>
+                    </div>
+                    <div className="position-pill-row">
+                      {position.position_source === 'exchange' ? (
+                        <StatusTag tone="success">Exchange Sync</StatusTag>
+                      ) : null}
+                      {position.is_counter_position ? (
+                        <StatusTag tone="warning">Counter</StatusTag>
+                      ) : null}
+                      <StatusTag
+                        tone={position.side === 'LONG' ? 'success' : 'warning'}
+                      >
+                        {position.side}
+                      </StatusTag>
                     </div>
                   </div>
-                    <div className="position-pill-row">
-                    {position.position_source === 'exchange' ? (
-                      <span className="pill">Exchange Sync</span>
-                    ) : null}
-                    {position.is_counter_position ? (
-                      <span className="pill pill-warn">Counter</span>
-                    ) : null}
-                    <span className={getSideClassName(position.side)}>
-                      {position.side}
-                    </span>
-                  </div>
+                  <PositionOverviewTable position={position} />
                 </div>
-                <PositionOverviewTable position={position} />
+                {position.supports_trailing ? (
+                  <TrailingDetails position={position} />
+                ) : (
+                  <ExchangeProtectionDetails position={position} />
+                )}
+                <Suspense fallback={<PositionChartFallback />}>
+                  <PositionChart
+                    entryPrice={position.entry_price}
+                    positionId={position.id}
+                    symbol={position.symbol}
+                  />
+                </Suspense>
               </div>
-              {position.supports_trailing ? (
-                <TrailingDetails position={position} />
-              ) : (
-                <ExchangeProtectionDetails position={position} />
-              )}
-              <Suspense fallback={<PositionChartFallback />}>
-                <PositionChart
-                  entryPrice={position.entry_price}
-                  positionId={position.id}
-                  symbol={position.symbol}
-                />
-              </Suspense>
-            </article>
+            </Card>
           ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }

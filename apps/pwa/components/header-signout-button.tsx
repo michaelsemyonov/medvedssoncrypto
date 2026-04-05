@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from 'antd';
 import { usePathname } from 'next/navigation';
 import { useTransition } from 'react';
 
@@ -14,9 +15,10 @@ export function HeaderSignOutButton() {
   }
 
   return (
-    <button
-      className="secondary-button hero-signout"
-      disabled={isPending}
+    <Button
+      className="hero-signout"
+      icon={<SignOutIcon className="hero-link-icon" />}
+      loading={isPending}
       onClick={() => {
         startTransition(async () => {
           await fetch('/api/auth/logout', {
@@ -25,12 +27,9 @@ export function HeaderSignOutButton() {
           window.location.href = '/login';
         });
       }}
-      type="button"
+      type="default"
     >
-      <span className="hero-link-content">
-        <SignOutIcon className="hero-link-icon" />
-        <span>{isPending ? 'Signing Out...' : 'Sign Out'}</span>
-      </span>
-    </button>
+      {isPending ? 'Signing Out...' : 'Sign Out'}
+    </Button>
   );
 }

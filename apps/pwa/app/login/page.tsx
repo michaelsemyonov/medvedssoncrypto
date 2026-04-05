@@ -1,7 +1,11 @@
+import { Button, Card, Input } from 'antd';
+
+import { Eyebrow } from '@/components/ui-primitives.tsx';
+
 export const dynamic = 'force-dynamic';
 
 export default async function LoginPage({
-  searchParams
+  searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
@@ -9,27 +13,34 @@ export default async function LoginPage({
   const hasError = params.error === 'invalid';
 
   return (
-    <section className="card" style={{ maxWidth: 520, margin: '0 auto' }}>
-      <div className="eyebrow">Admin Login</div>
+    <Card
+      className="surface-card center-card login-card"
+      styles={{ body: { padding: 24 } }}
+    >
+      <Eyebrow>Admin Login</Eyebrow>
       <h2>Unlock the MedvedssonCrypto PWA</h2>
       <p className="muted">
-        This build uses a single shared admin password and a signed session cookie.
+        This build uses a single shared admin password and a signed session
+        cookie.
       </p>
       <form action="/api/auth/login" method="post" className="stack-lg">
-        <label htmlFor="password">Password</label>
-        <input
+        <label className="field-label" htmlFor="password">
+          Password
+        </label>
+        <Input
           id="password"
           name="password"
           type="password"
           required
-          className="input"
           autoFocus
         />
-        {hasError ? <p className="status-line" style={{ color: 'var(--danger)' }}>Invalid password.</p> : null}
-        <button className="primary-button" type="submit">
+        {hasError ? (
+          <p className="status-line status-line-danger">Invalid password.</p>
+        ) : null}
+        <Button htmlType="submit" type="primary">
           Sign In
-        </button>
+        </Button>
       </form>
-    </section>
+    </Card>
   );
 }

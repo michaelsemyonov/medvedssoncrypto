@@ -1,6 +1,21 @@
 'use client';
 
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Switch,
+  Tabs,
+} from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+
+import { Eyebrow, StatusTag } from '@/components/ui-primitives.tsx';
 
 type TrailingProfile = 'conservative' | 'balanced' | 'aggressive' | 'custom';
 
@@ -143,6 +158,42 @@ type SettingsClientProps = {
 };
 
 type SettingsTab = 'symbols' | 'exchanges' | 'pushes';
+
+type Option<TValue extends string> = {
+  label: string;
+  value: TValue;
+};
+
+const MARKET_EXCHANGE_OPTIONS: Option<SymbolDraft['exchange']>[] = [
+  { label: 'Bybit', value: 'bybit' },
+  { label: 'OKX', value: 'okx' },
+  { label: 'Binance (legacy)', value: 'binance' },
+];
+
+const BROKER_OPTIONS: Option<SymbolDraft['positionBroker']>[] = [
+  { label: 'Bybit', value: 'bybit' },
+  { label: 'OKX', value: 'okx' },
+];
+
+const TIMEFRAME_OPTIONS: Option<SymbolDraft['timeframe']>[] = [
+  { label: '5m', value: '5m' },
+  { label: '15m', value: '15m' },
+];
+
+const FILL_MODEL_OPTIONS: Option<SymbolDraft['fillModel']>[] = [
+  { label: 'next_open', value: 'next_open' },
+];
+
+const POSITION_SIZING_OPTIONS: Option<SymbolDraft['positionSizingMode']>[] = [
+  { label: 'fixed_usdt', value: 'fixed_usdt' },
+];
+
+const TRAILING_PROFILE_OPTIONS: Option<TrailingProfile>[] = [
+  { label: 'Conservative', value: 'conservative' },
+  { label: 'Balanced (recommended)', value: 'balanced' },
+  { label: 'Aggressive', value: 'aggressive' },
+  { label: 'Custom', value: 'custom' },
+];
 
 const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -292,6 +343,24 @@ const handleProfileChange = (
   }
 };
 
+function SectionCard({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <Card
+      className="surface-card settings-section-card"
+      styles={{ body: { padding: 16 } }}
+    >
+      <h3>{title}</h3>
+      {children}
+    </Card>
+  );
+}
+
 function SymbolEditor({
   title,
   submitLabel,
@@ -302,511 +371,362 @@ function SymbolEditor({
   onClose,
   onSubmit,
 }: SymbolEditorProps) {
+  const updateNumber =
+    <TKey extends keyof SymbolDraft>(key: TKey) =>
+    (value: number | null) => {
+      onChange(key, Number(value ?? 0) as SymbolDraft[TKey]);
+    };
+
   return (
-    <section className="stack-lg">
+    <div className="stack-lg">
       <div className="settings-head">
         <div>
-          <div className="eyebrow">{title}</div>
+          <Eyebrow>{title}</Eyebrow>
           <h2>{draft.symbol || 'Unsaved symbol'}</h2>
         </div>
-        <span className={draft.active ? 'pill' : 'pill pill-warn'}>
+        <StatusTag tone={draft.active ? 'success' : 'warning'}>
           {draft.active ? 'Active' : 'Paused'}
-        </span>
+        </StatusTag>
       </div>
 
-      <div className="settings-section">
-        <h3>Market</h3>
-        <div className="field-grid">
-          <label className="field-stack">
-            <span>Symbol</span>
-            <input
-              className="input"
-              value={draft.symbol}
-              onChange={(event) => onChange('symbol', event.target.value)}
-              placeholder="BTC/USDT"
-            />
-          </label>
-          <label className="field-stack">
-            <span>Market Data Exchange</span>
-            <select
-              className="input"
-              value={draft.exchange}
-              onChange={(event) =>
-                onChange(
-                  'exchange',
-                  event.target.value as SymbolDraft['exchange']
-                )
-              }
-            >
-              <option value="bybit">Bybit</option>
-              <option value="okx">OKX</option>
-              <option value="binance">Binance (legacy)</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Position Broker</span>
-            <select
-              className="input"
-              value={draft.positionBroker}
-              onChange={(event) =>
-                onChange(
-                  'positionBroker',
-                  event.target.value as SymbolDraft['positionBroker']
-                )
-              }
-            >
-              <option value="bybit">Bybit</option>
-              <option value="okx">OKX</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Counter Position Broker</span>
-            <select
-              className="input"
-              value={draft.counterPositionBroker}
-              onChange={(event) =>
-                onChange(
-                  'counterPositionBroker',
-                  event.target.value as SymbolDraft['counterPositionBroker']
-                )
-              }
-            >
-              <option value="bybit">Bybit</option>
-              <option value="okx">OKX</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Timeframe</span>
-            <select
-              className="input"
-              value={draft.timeframe}
-              onChange={(event) =>
-                onChange(
-                  'timeframe',
-                  event.target.value as SymbolDraft['timeframe']
-                )
-              }
-            >
-              <option value="5m">5m</option>
-              <option value="15m">15m</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Poll Interval (ms)</span>
-            <input
-              className="input"
-              type="number"
-              min={100}
-              value={draft.pollIntervalMs}
-              onChange={(event) =>
-                onChange('pollIntervalMs', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Exchange Timeout (ms)</span>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              value={draft.exchangeTimeoutMs}
-              onChange={(event) =>
-                onChange('exchangeTimeoutMs', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Exchange Rate Limit (ms)</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              value={draft.exchangeRateLimitMs}
-              onChange={(event) =>
-                onChange('exchangeRateLimitMs', Number(event.target.value))
-              }
-            />
-          </label>
-        </div>
-        <div className="toggle-grid">
-          <label className="toggle-row">
-            <input
-              checked={draft.active}
-              onChange={(event) => onChange('active', event.target.checked)}
-              type="checkbox"
-            />
-            <span>Active</span>
-          </label>
-          <label className="toggle-row">
-            <input
-              checked={draft.dryRun}
-              onChange={(event) => onChange('dryRun', event.target.checked)}
-              type="checkbox"
-            />
-            <span>Dry Run</span>
-          </label>
-        </div>
-      </div>
+      <Form layout="vertical">
+        <div className="stack-lg">
+          <SectionCard title="Market">
+            <div className="field-grid">
+              <Form.Item label="Symbol">
+                <Input
+                  onChange={(event) => onChange('symbol', event.target.value)}
+                  placeholder="BTC/USDT"
+                  value={draft.symbol}
+                />
+              </Form.Item>
+              <Form.Item label="Market Data Exchange">
+                <Select
+                  className="full-width-control"
+                  onChange={(value) => onChange('exchange', value)}
+                  options={MARKET_EXCHANGE_OPTIONS}
+                  value={draft.exchange}
+                />
+              </Form.Item>
+              <Form.Item label="Position Broker">
+                <Select
+                  className="full-width-control"
+                  onChange={(value) => onChange('positionBroker', value)}
+                  options={BROKER_OPTIONS}
+                  value={draft.positionBroker}
+                />
+              </Form.Item>
+              <Form.Item label="Counter Position Broker">
+                <Select
+                  className="full-width-control"
+                  onChange={(value) => onChange('counterPositionBroker', value)}
+                  options={BROKER_OPTIONS}
+                  value={draft.counterPositionBroker}
+                />
+              </Form.Item>
+              <Form.Item label="Timeframe">
+                <Select
+                  className="full-width-control"
+                  onChange={(value) => onChange('timeframe', value)}
+                  options={TIMEFRAME_OPTIONS}
+                  value={draft.timeframe}
+                />
+              </Form.Item>
+              <Form.Item label="Poll Interval (ms)">
+                <InputNumber
+                  className="full-width-control"
+                  min={100}
+                  onChange={updateNumber('pollIntervalMs')}
+                  value={draft.pollIntervalMs}
+                />
+              </Form.Item>
+              <Form.Item label="Exchange Timeout (ms)">
+                <InputNumber
+                  className="full-width-control"
+                  min={1}
+                  onChange={updateNumber('exchangeTimeoutMs')}
+                  value={draft.exchangeTimeoutMs}
+                />
+              </Form.Item>
+              <Form.Item label="Exchange Rate Limit (ms)">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('exchangeRateLimitMs')}
+                  value={draft.exchangeRateLimitMs}
+                />
+              </Form.Item>
+            </div>
+            <div className="toggle-grid">
+              <div className="toggle-row">
+                <Switch
+                  checked={draft.active}
+                  onChange={(checked) => onChange('active', checked)}
+                />
+                <span>Active</span>
+              </div>
+              <div className="toggle-row">
+                <Switch
+                  checked={draft.dryRun}
+                  onChange={(checked) => onChange('dryRun', checked)}
+                />
+                <span>Dry Run</span>
+              </div>
+            </div>
+          </SectionCard>
 
-      <div className="settings-section">
-        <h3>Strategy</h3>
-        <div className="field-grid">
-          <label className="field-stack">
-            <span>Strategy Key</span>
-            <input
-              className="input"
-              value={draft.strategyKey}
-              onChange={(event) => onChange('strategyKey', event.target.value)}
-            />
-          </label>
-          <label className="field-stack">
-            <span>Strategy Version</span>
-            <input
-              className="input"
-              value={draft.strategyVersion}
-              onChange={(event) =>
-                onChange('strategyVersion', event.target.value)
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Signal N</span>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              value={draft.signalN}
-              onChange={(event) =>
-                onChange('signalN', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Signal K</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.signalK}
-              onChange={(event) =>
-                onChange('signalK', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Signal Hold Bars</span>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              value={draft.signalHBars}
-              onChange={(event) =>
-                onChange('signalHBars', Number(event.target.value))
-              }
-            />
-          </label>
-        </div>
-        <div className="toggle-grid">
-          <label className="toggle-row">
-            <input
-              checked={draft.allowShort}
-              onChange={(event) => onChange('allowShort', event.target.checked)}
-              type="checkbox"
-            />
-            <span>Allow Short</span>
-          </label>
-        </div>
-      </div>
+          <SectionCard title="Strategy">
+            <div className="field-grid">
+              <Form.Item label="Strategy Key">
+                <Input
+                  onChange={(event) =>
+                    onChange('strategyKey', event.target.value)
+                  }
+                  value={draft.strategyKey}
+                />
+              </Form.Item>
+              <Form.Item label="Strategy Version">
+                <Input
+                  onChange={(event) =>
+                    onChange('strategyVersion', event.target.value)
+                  }
+                  value={draft.strategyVersion}
+                />
+              </Form.Item>
+              <Form.Item label="Signal N">
+                <InputNumber
+                  className="full-width-control"
+                  min={1}
+                  onChange={updateNumber('signalN')}
+                  value={draft.signalN}
+                />
+              </Form.Item>
+              <Form.Item label="Signal K">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('signalK')}
+                  step={0.1}
+                  value={draft.signalK}
+                />
+              </Form.Item>
+              <Form.Item label="Signal Hold Bars">
+                <InputNumber
+                  className="full-width-control"
+                  min={1}
+                  onChange={updateNumber('signalHBars')}
+                  value={draft.signalHBars}
+                />
+              </Form.Item>
+            </div>
+            <div className="toggle-grid">
+              <div className="toggle-row">
+                <Switch
+                  checked={draft.allowShort}
+                  onChange={(checked) => onChange('allowShort', checked)}
+                />
+                <span>Allow Short</span>
+              </div>
+            </div>
+          </SectionCard>
 
-      <div className="settings-section">
-        <h3>Execution</h3>
-        <div className="field-grid">
-          <label className="field-stack">
-            <span>Fill Model</span>
-            <select
-              className="input"
-              value={draft.fillModel}
-              onChange={(event) =>
-                onChange(
-                  'fillModel',
-                  event.target.value as SymbolDraft['fillModel']
-                )
-              }
-            >
-              <option value="next_open">next_open</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Position Sizing</span>
-            <select
-              className="input"
-              value={draft.positionSizingMode}
-              onChange={(event) =>
-                onChange(
-                  'positionSizingMode',
-                  event.target.value as SymbolDraft['positionSizingMode']
-                )
-              }
-            >
-              <option value="fixed_usdt">fixed_usdt</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Fee Rate</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.feeRate}
-              onChange={(event) =>
-                onChange('feeRate', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Slippage (bps)</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.slippageBps}
-              onChange={(event) =>
-                onChange('slippageBps', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Fixed USDT Per Trade</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.fixedUsdtPerTrade}
-              onChange={(event) =>
-                onChange('fixedUsdtPerTrade', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Equity Start (USDT)</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.equityStartUsdt}
-              onChange={(event) =>
-                onChange('equityStartUsdt', Number(event.target.value))
-              }
-            />
-          </label>
-        </div>
-      </div>
+          <SectionCard title="Execution">
+            <div className="field-grid">
+              <Form.Item label="Fill Model">
+                <Select
+                  className="full-width-control"
+                  onChange={(value) => onChange('fillModel', value)}
+                  options={FILL_MODEL_OPTIONS}
+                  value={draft.fillModel}
+                />
+              </Form.Item>
+              <Form.Item label="Position Sizing">
+                <Select
+                  className="full-width-control"
+                  onChange={(value) => onChange('positionSizingMode', value)}
+                  options={POSITION_SIZING_OPTIONS}
+                  value={draft.positionSizingMode}
+                />
+              </Form.Item>
+              <Form.Item label="Fee Rate">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('feeRate')}
+                  step={0.0001}
+                  value={draft.feeRate}
+                />
+              </Form.Item>
+              <Form.Item label="Slippage (bps)">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('slippageBps')}
+                  step={0.1}
+                  value={draft.slippageBps}
+                />
+              </Form.Item>
+              <Form.Item label="Fixed USDT Per Trade">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('fixedUsdtPerTrade')}
+                  step={1}
+                  value={draft.fixedUsdtPerTrade}
+                />
+              </Form.Item>
+              <Form.Item label="Equity Start (USDT)">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('equityStartUsdt')}
+                  step={1}
+                  value={draft.equityStartUsdt}
+                />
+              </Form.Item>
+            </div>
+          </SectionCard>
 
-      <div className="settings-section">
-        <h3>Risk</h3>
-        <div className="field-grid">
-          <label className="field-stack">
-            <span>Max Open Positions</span>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              value={draft.maxOpenPositions}
-              onChange={(event) =>
-                onChange('maxOpenPositions', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Cooldown Bars</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              value={draft.cooldownBars}
-              onChange={(event) =>
-                onChange('cooldownBars', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Stop Loss %</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.stopLossPct}
-              onChange={(event) =>
-                onChange('stopLossPct', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Max Daily Drawdown %</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.maxDailyDrawdownPct}
-              onChange={(event) =>
-                onChange('maxDailyDrawdownPct', Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="field-stack">
-            <span>Max Consecutive Losses</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              value={draft.maxConsecutiveLosses}
-              onChange={(event) =>
-                onChange('maxConsecutiveLosses', Number(event.target.value))
-              }
-            />
-          </label>
-        </div>
-      </div>
+          <SectionCard title="Risk">
+            <div className="field-grid">
+              <Form.Item label="Max Open Positions">
+                <InputNumber
+                  className="full-width-control"
+                  min={1}
+                  onChange={updateNumber('maxOpenPositions')}
+                  value={draft.maxOpenPositions}
+                />
+              </Form.Item>
+              <Form.Item label="Cooldown Bars">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('cooldownBars')}
+                  value={draft.cooldownBars}
+                />
+              </Form.Item>
+              <Form.Item label="Stop Loss %">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('stopLossPct')}
+                  step={0.1}
+                  value={draft.stopLossPct}
+                />
+              </Form.Item>
+              <Form.Item label="Max Daily Drawdown %">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('maxDailyDrawdownPct')}
+                  step={0.1}
+                  value={draft.maxDailyDrawdownPct}
+                />
+              </Form.Item>
+              <Form.Item label="Max Consecutive Losses">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={updateNumber('maxConsecutiveLosses')}
+                  value={draft.maxConsecutiveLosses}
+                />
+              </Form.Item>
+            </div>
+          </SectionCard>
 
-      <div className="settings-section">
-        <h3>Exit / Trailing Profit</h3>
-        <div className="toggle-grid">
-          <label className="toggle-row">
-            <input
-              checked={draft.trailingEnabled}
-              onChange={(event) =>
-                onChange('trailingEnabled', event.target.checked)
-              }
-              type="checkbox"
-            />
-            <span>Trailing Profit Enabled</span>
-          </label>
+          <SectionCard title="Exit / Trailing Profit">
+            <div className="toggle-grid">
+              <div className="toggle-row">
+                <Switch
+                  checked={draft.trailingEnabled}
+                  onChange={(checked) => onChange('trailingEnabled', checked)}
+                />
+                <span>Trailing Profit Enabled</span>
+              </div>
+            </div>
+            <div className="field-grid">
+              <Form.Item label="Profile">
+                <Select
+                  className="full-width-control"
+                  onChange={(value) => handleProfileChange(value, onChange)}
+                  options={TRAILING_PROFILE_OPTIONS}
+                  value={draft.trailingProfile}
+                />
+              </Form.Item>
+              <Form.Item label="Activation Profit %">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={(value) => {
+                    updateNumber('trailingActivationProfitPct')(value);
+                    onChange('trailingProfile', 'custom');
+                  }}
+                  step={0.1}
+                  value={draft.trailingActivationProfitPct}
+                />
+              </Form.Item>
+              <Form.Item label="Giveback Ratio">
+                <InputNumber
+                  className="full-width-control"
+                  max={1}
+                  min={0}
+                  onChange={(value) => {
+                    updateNumber('trailingGivebackRatio')(value);
+                    onChange('trailingProfile', 'custom');
+                  }}
+                  step={0.01}
+                  value={draft.trailingGivebackRatio}
+                />
+              </Form.Item>
+              <Form.Item label="Giveback Min %">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={(value) => {
+                    updateNumber('trailingGivebackMinPct')(value);
+                    onChange('trailingProfile', 'custom');
+                  }}
+                  step={0.1}
+                  value={draft.trailingGivebackMinPct}
+                />
+              </Form.Item>
+              <Form.Item label="Giveback Max %">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={(value) => {
+                    updateNumber('trailingGivebackMaxPct')(value);
+                    onChange('trailingProfile', 'custom');
+                  }}
+                  step={0.1}
+                  value={draft.trailingGivebackMaxPct}
+                />
+              </Form.Item>
+              <Form.Item label="Min Locked Profit %">
+                <InputNumber
+                  className="full-width-control"
+                  min={0}
+                  onChange={(value) => {
+                    updateNumber('trailingMinLockedProfitPct')(value);
+                    onChange('trailingProfile', 'custom');
+                  }}
+                  step={0.1}
+                  value={draft.trailingMinLockedProfitPct}
+                />
+              </Form.Item>
+            </div>
+          </SectionCard>
         </div>
-        <div className="field-grid">
-          <label className="field-stack">
-            <span>Profile</span>
-            <select
-              className="input"
-              value={draft.trailingProfile}
-              onChange={(event) =>
-                handleProfileChange(
-                  event.target.value as TrailingProfile,
-                  onChange
-                )
-              }
-            >
-              <option value="conservative">Conservative</option>
-              <option value="balanced">Balanced (recommended)</option>
-              <option value="aggressive">Aggressive</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Activation Profit %</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.trailingActivationProfitPct}
-              onChange={(event) => {
-                onChange(
-                  'trailingActivationProfitPct',
-                  Number(event.target.value)
-                );
-                onChange('trailingProfile', 'custom');
-              }}
-            />
-          </label>
-          <label className="field-stack">
-            <span>Giveback Ratio</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              max={1}
-              step="any"
-              value={draft.trailingGivebackRatio}
-              onChange={(event) => {
-                onChange('trailingGivebackRatio', Number(event.target.value));
-                onChange('trailingProfile', 'custom');
-              }}
-            />
-          </label>
-          <label className="field-stack">
-            <span>Giveback Min %</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.trailingGivebackMinPct}
-              onChange={(event) => {
-                onChange('trailingGivebackMinPct', Number(event.target.value));
-                onChange('trailingProfile', 'custom');
-              }}
-            />
-          </label>
-          <label className="field-stack">
-            <span>Giveback Max %</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.trailingGivebackMaxPct}
-              onChange={(event) => {
-                onChange('trailingGivebackMaxPct', Number(event.target.value));
-                onChange('trailingProfile', 'custom');
-              }}
-            />
-          </label>
-          <label className="field-stack">
-            <span>Min Locked Profit %</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="any"
-              value={draft.trailingMinLockedProfitPct}
-              onChange={(event) => {
-                onChange(
-                  'trailingMinLockedProfitPct',
-                  Number(event.target.value)
-                );
-                onChange('trailingProfile', 'custom');
-              }}
-            />
-          </label>
-        </div>
-      </div>
+      </Form>
 
       <div className="button-row">
-        <button
-          className="secondary-button"
-          onClick={onClose}
-          type="button"
-        >
-          Close
-        </button>
-        <button
-          className="primary-button"
-          disabled={saving}
-          onClick={onSubmit}
-          type="button"
-        >
-          {saving ? 'Saving...' : submitLabel}
-        </button>
+        <Button onClick={onClose}>Close</Button>
+        <Button loading={saving} onClick={onSubmit} type="primary">
+          {submitLabel}
+        </Button>
       </div>
       <p className="status-line">{status ?? ' '}</p>
-    </section>
+    </div>
   );
 }
 
@@ -835,112 +755,109 @@ function ExchangePanel({
   onApplyStopLosses,
 }: ExchangePanelProps) {
   return (
-    <section className="card exchange-panel">
+    <Card
+      className="surface-card exchange-panel"
+      styles={{ body: { padding: 20 } }}
+    >
       <div className="settings-head">
         <div>
-          <div className="eyebrow">Exchange Integration</div>
+          <Eyebrow>Exchange Integration</Eyebrow>
           <h2>{account.exchange === 'bybit' ? 'Bybit' : 'OKX'}</h2>
         </div>
-        <span
-          className={
-            account.hasApiKey && account.hasApiSecret
-              ? 'pill'
-              : 'pill pill-warn'
+        <StatusTag
+          tone={
+            account.hasApiKey && account.hasApiSecret ? 'success' : 'warning'
           }
         >
           {account.hasApiKey && account.hasApiSecret
             ? 'Credentials Stored'
             : 'Credentials Missing'}
-        </span>
+        </StatusTag>
       </div>
 
-      <div className="settings-section">
-        <h3>Credentials</h3>
-        <div className="field-grid">
-          <label className="field-stack">
-            <span>API Key</span>
-            <input
-              className="input"
-              onChange={(event) => onChange('apiKey', event.target.value)}
-              placeholder={account.apiKeyMask ?? 'Paste a new API key'}
-              value={draft.apiKey}
-            />
-          </label>
-          <label className="field-stack">
-            <span>API Secret</span>
-            <input
-              className="input"
-              onChange={(event) => onChange('apiSecret', event.target.value)}
-              placeholder={
-                account.hasApiSecret ? 'Stored. Enter to replace.' : 'Paste a new API secret'
-              }
-              type="password"
-              value={draft.apiSecret}
-            />
-          </label>
-          {account.exchange === 'okx' ? (
-            <label className="field-stack">
-              <span>Passphrase</span>
-              <input
-                className="input"
-                onChange={(event) =>
-                  onChange('apiPassphrase', event.target.value)
-                }
-                placeholder={
-                  account.hasApiPassphrase
-                    ? 'Stored. Enter to replace.'
-                    : 'Paste the OKX API passphrase'
-                }
-                type="password"
-                value={draft.apiPassphrase}
-              />
-            </label>
-          ) : null}
-        </div>
-        <div className="button-row">
-          <button
-            className="primary-button"
-            disabled={saving}
-            onClick={onSave}
-            type="button"
-          >
-            {saving ? 'Saving...' : 'Save Credentials'}
-          </button>
-        </div>
-      </div>
+      <Form layout="vertical">
+        <div className="stack-lg">
+          <SectionCard title="Credentials">
+            <div className="field-grid">
+              <Form.Item label="API Key">
+                <Input
+                  onChange={(event) => onChange('apiKey', event.target.value)}
+                  placeholder={account.apiKeyMask ?? 'Paste a new API key'}
+                  value={draft.apiKey}
+                />
+              </Form.Item>
+              <Form.Item label="API Secret">
+                <Input
+                  onChange={(event) =>
+                    onChange('apiSecret', event.target.value)
+                  }
+                  placeholder={
+                    account.hasApiSecret
+                      ? 'Stored. Enter to replace.'
+                      : 'Paste a new API secret'
+                  }
+                  type="password"
+                  value={draft.apiSecret}
+                />
+              </Form.Item>
+              {account.exchange === 'okx' ? (
+                <Form.Item label="Passphrase">
+                  <Input
+                    onChange={(event) =>
+                      onChange('apiPassphrase', event.target.value)
+                    }
+                    placeholder={
+                      account.hasApiPassphrase
+                        ? 'Stored. Enter to replace.'
+                        : 'Paste the OKX API passphrase'
+                    }
+                    type="password"
+                    value={draft.apiPassphrase}
+                  />
+                </Form.Item>
+              ) : null}
+            </div>
+            <div className="button-row">
+              <Button loading={saving} onClick={onSave} type="primary">
+                Save Credentials
+              </Button>
+            </div>
+          </SectionCard>
 
-      <div className="settings-section">
-        <h3>Position Sync</h3>
-        <div className="signal-grid">
-          <div className="signal-field">
-            <span className="signal-field-label">Last Validation</span>
-            <strong>{formatTimestamp(account.lastValidatedAt)}</strong>
-          </div>
-          <div className="signal-field">
-            <span className="signal-field-label">Last Position Sync</span>
-            <strong>{formatTimestamp(account.lastSyncAt)}</strong>
-          </div>
-          <div className="signal-field">
-            <span className="signal-field-label">Latest Result</span>
-            <strong>{account.lastSyncError ?? 'Healthy'}</strong>
-          </div>
+          <SectionCard title="Position Sync">
+            <div className="signal-grid">
+              <Card
+                className="surface-card signal-field-card"
+                styles={{ body: { padding: 14 } }}
+              >
+                <span className="signal-field-label">Last Validation</span>
+                <strong>{formatTimestamp(account.lastValidatedAt)}</strong>
+              </Card>
+              <Card
+                className="surface-card signal-field-card"
+                styles={{ body: { padding: 14 } }}
+              >
+                <span className="signal-field-label">Last Position Sync</span>
+                <strong>{formatTimestamp(account.lastSyncAt)}</strong>
+              </Card>
+              <Card
+                className="surface-card signal-field-card"
+                styles={{ body: { padding: 14 } }}
+              >
+                <span className="signal-field-label">Latest Result</span>
+                <strong>{account.lastSyncError ?? 'Healthy'}</strong>
+              </Card>
+            </div>
+            <div className="button-row">
+              <Button onClick={onSync}>Sync Open Positions</Button>
+              <Button onClick={onApplyStopLosses}>Apply Stop Losses</Button>
+            </div>
+          </SectionCard>
         </div>
-        <div className="button-row">
-          <button className="secondary-button" onClick={onSync} type="button">
-            Sync Open Positions
-          </button>
-          <button
-            className="secondary-button"
-            onClick={onApplyStopLosses}
-            type="button"
-          >
-            Apply Stop Losses
-          </button>
-        </div>
-      </div>
+      </Form>
 
       <p className="status-line">{status ?? ' '}</p>
-    </section>
+    </Card>
   );
 }
 
@@ -985,7 +902,7 @@ export function SettingsClient({
   const activeSymbolDraft =
     activeSymbolId === NEW_SYMBOL_MODAL_ID
       ? newSymbol
-      : symbols.find((symbol) => symbol.id === activeSymbolId) ?? null;
+      : (symbols.find((symbol) => symbol.id === activeSymbolId) ?? null);
 
   const activeSymbolTitle =
     activeSymbolId === NEW_SYMBOL_MODAL_ID
@@ -1170,16 +1087,23 @@ export function SettingsClient({
     successMessage: (payload: {
       syncedAt?: string | null;
       validatedAt?: string | null;
-      summary?: { openCount?: number; linkedCount?: number; closedCount?: number };
+      summary?: {
+        openCount?: number;
+        linkedCount?: number;
+        closedCount?: number;
+      };
       updated?: number;
     }) => string
   ) => {
     setExchangeSavingKey(exchange);
 
     try {
-      const response = await fetch(`/api/settings/exchanges/${exchange}/${action}`, {
-        method: 'POST',
-      });
+      const response = await fetch(
+        `/api/settings/exchanges/${exchange}/${action}`,
+        {
+          method: 'POST',
+        }
+      );
 
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
@@ -1188,7 +1112,11 @@ export function SettingsClient({
       const payload = (await response.json()) as {
         syncedAt?: string | null;
         validatedAt?: string | null;
-        summary?: { openCount?: number; linkedCount?: number; closedCount?: number };
+        summary?: {
+          openCount?: number;
+          linkedCount?: number;
+          closedCount?: number;
+        };
         updated?: number;
       };
 
@@ -1197,7 +1125,9 @@ export function SettingsClient({
         [exchange]: {
           ...current[exchange],
           lastValidatedAt:
-            payload.validatedAt ?? payload.syncedAt ?? current[exchange].lastValidatedAt,
+            payload.validatedAt ??
+            payload.syncedAt ??
+            current[exchange].lastValidatedAt,
           lastSyncAt: payload.syncedAt ?? current[exchange].lastSyncAt,
           lastSyncError: null,
         },
@@ -1298,9 +1228,19 @@ export function SettingsClient({
     setStatus('Push notifications disabled.');
   };
 
+  const description =
+    activeTab === 'symbols'
+      ? 'Symbols now own their exchange, strategy, execution, and risk settings directly in the database. Changes here are what the runner will use.'
+      : activeTab === 'exchanges'
+        ? 'Store Bybit and OKX credentials, import live positions, and push stop-loss protection to synced exchange positions.'
+        : 'Approved signals across all symbols arrive as web push alerts.';
+
   return (
     <div className="stack-lg">
-      <section className="card settings-shell">
+      <Card
+        className="surface-card settings-shell"
+        styles={{ body: { padding: 20 } }}
+      >
         <div className="settings-toolbar">
           <div>
             <h2>Settings</h2>
@@ -1309,184 +1249,132 @@ export function SettingsClient({
             </p>
           </div>
         </div>
-        <div
-          aria-label="Settings sections"
-          className="settings-tablist"
-          role="tablist"
-        >
-          <button
-            aria-controls="settings-panel-symbols"
-            aria-selected={activeTab === 'symbols'}
-            className={
-              activeTab === 'symbols'
-                ? 'settings-tab settings-tab-active'
-                : 'settings-tab'
-            }
-            id="settings-tab-symbols"
-            onClick={() => setActiveTab('symbols')}
-            role="tab"
-            type="button"
-          >
-            Symbols
-          </button>
-          <button
-            aria-controls="settings-panel-exchanges"
-            aria-selected={activeTab === 'exchanges'}
-            className={
-              activeTab === 'exchanges'
-                ? 'settings-tab settings-tab-active'
-                : 'settings-tab'
-            }
-            id="settings-tab-exchanges"
-            onClick={() => setActiveTab('exchanges')}
-            role="tab"
-            type="button"
-          >
-            Exchanges
-          </button>
-          <button
-            aria-controls="settings-panel-pushes"
-            aria-selected={activeTab === 'pushes'}
-            className={
-              activeTab === 'pushes'
-                ? 'settings-tab settings-tab-active'
-                : 'settings-tab'
-            }
-            id="settings-tab-pushes"
-            onClick={() => setActiveTab('pushes')}
-            role="tab"
-            type="button"
-          >
-            Pushes
-          </button>
-        </div>
-        <p className="muted">
-          {activeTab === 'symbols'
-            ? 'Symbols now own their exchange, strategy, execution, and risk settings directly in the database. Changes here are what the runner will use.'
-            : activeTab === 'exchanges'
-              ? 'Store Bybit and OKX credentials, import live positions, and push stop-loss protection to synced exchange positions.'
-              : 'Approved signals across all symbols arrive as web push alerts.'}
-        </p>
+        <Tabs
+          activeKey={activeTab}
+          className="settings-tabs"
+          items={[
+            { key: 'symbols', label: 'Symbols' },
+            { key: 'exchanges', label: 'Exchanges' },
+            { key: 'pushes', label: 'Pushes' },
+          ]}
+          onChange={(key) => setActiveTab(key as SettingsTab)}
+        />
+        <p className="muted">{description}</p>
         {apiUnavailable ? (
-          <p className="status-line">
-            Settings are temporarily degraded while the backend API reconnects.
-          </p>
+          <Alert
+            description="Settings are temporarily degraded while the backend API reconnects."
+            showIcon
+            type="warning"
+          />
         ) : null}
-      </section>
+      </Card>
 
       {activeTab === 'symbols' ? (
-        <div
-          aria-labelledby="settings-tab-symbols"
-          id="settings-panel-symbols"
-          role="tabpanel"
+        <Card
+          className="surface-card settings-symbols-panel"
+          styles={{ body: { padding: 20 } }}
         >
-          <section className="card settings-symbols-panel">
-            <div className="settings-symbols-toolbar">
-              <div>
-                <h2>Symbols</h2>
-                <p className="muted">
-                  Pick a symbol to edit its configuration, or add a new one.
-                </p>
-              </div>
-              <button
-                className="primary-button"
-                onClick={() => setActiveSymbolId(NEW_SYMBOL_MODAL_ID)}
-                type="button"
-              >
-                {hasUnsavedNewSymbol ? 'Continue Unsaved Symbol' : 'Add Symbol'}
-              </button>
+          <div className="settings-symbols-toolbar">
+            <div>
+              <h2>Symbols</h2>
+              <p className="muted">
+                Pick a symbol to edit its configuration, or add a new one.
+              </p>
             </div>
-
-            {symbolStatus.new ? (
-              <p className="status-line">{symbolStatus.new}</p>
-            ) : null}
-
-            {symbols.length === 0 ? (
-              <p className="muted">No symbols are configured yet.</p>
-            ) : (
-              <div className="symbol-list" role="list">
-                {symbols.map((symbol) => (
-                  <button
-                    className="symbol-list-item"
-                    key={symbol.id}
-                    onClick={() => setActiveSymbolId(symbol.id ?? null)}
-                    type="button"
-                  >
-                    <span className="symbol-list-main">
-                      <span className="symbol-list-title-row">
-                        <strong>{symbol.symbol}</strong>
-                        <span
-                          className={symbol.active ? 'pill' : 'pill pill-warn'}
-                        >
-                          {symbol.active ? 'Active' : 'Paused'}
-                        </span>
-                      </span>
-                      <span className="symbol-list-meta">
-                        {symbol.exchange.toUpperCase()} · {symbol.timeframe} ·{' '}
-                        {symbol.allowShort ? 'Short enabled' : 'Long only'}
-                      </span>
-                    </span>
-                    <span className="symbol-list-action">Edit</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {activeSymbolDraft ? (
-            <div
-              aria-modal="true"
-              className="settings-modal-backdrop"
-              onClick={() => setActiveSymbolId(null)}
-              role="dialog"
+            <Button
+              onClick={() => setActiveSymbolId(NEW_SYMBOL_MODAL_ID)}
+              type="primary"
             >
-              <div
-                className="settings-modal"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <SymbolEditor
-                  title={activeSymbolTitle}
-                  submitLabel={
-                    activeSymbolId === NEW_SYMBOL_MODAL_ID
-                      ? 'Add Symbol'
-                      : 'Save Settings'
-                  }
-                  status={activeSymbolStatus}
-                  saving={savingKey === activeSymbolId}
-                  draft={activeSymbolDraft}
-                  onChange={(key, value) => {
-                    if (activeSymbolId === NEW_SYMBOL_MODAL_ID) {
-                      updateNewSymbol(key, value);
-                      return;
-                    }
+              {hasUnsavedNewSymbol ? 'Continue Unsaved Symbol' : 'Add Symbol'}
+            </Button>
+          </div>
 
-                    if (!activeSymbolId) {
-                      return;
-                    }
-
-                    updateSymbolDraft(activeSymbolId, key, value);
-                  }}
-                  onClose={() => setActiveSymbolId(null)}
-                  onSubmit={() => {
-                    if (activeSymbolId === NEW_SYMBOL_MODAL_ID) {
-                      void createSymbol();
-                      return;
-                    }
-
-                    void saveExistingSymbol(activeSymbolDraft);
-                  }}
-                />
-              </div>
-            </div>
+          {symbolStatus.new ? (
+            <p className="status-line">{symbolStatus.new}</p>
           ) : null}
-        </div>
+
+          {symbols.length === 0 ? (
+            <Empty
+              description="No symbols are configured yet."
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
+          ) : (
+            <div className="symbol-list">
+              {symbols.map((symbol) => (
+                <Card
+                  className="surface-card symbol-list-item-card"
+                  extra={
+                    <Button
+                      onClick={() => setActiveSymbolId(symbol.id ?? null)}
+                      type="default"
+                    >
+                      Edit
+                    </Button>
+                  }
+                  key={symbol.id}
+                  styles={{ body: { padding: 18 } }}
+                >
+                  <div className="symbol-list-main">
+                    <div className="symbol-list-title-row">
+                      <strong>{symbol.symbol}</strong>
+                      <StatusTag tone={symbol.active ? 'success' : 'warning'}>
+                        {symbol.active ? 'Active' : 'Paused'}
+                      </StatusTag>
+                    </div>
+                    <span className="symbol-list-meta">
+                      {symbol.exchange.toUpperCase()} · {symbol.timeframe} ·{' '}
+                      {symbol.allowShort ? 'Short enabled' : 'Long only'}
+                    </span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <Modal
+            footer={null}
+            onCancel={() => setActiveSymbolId(null)}
+            open={Boolean(activeSymbolDraft)}
+            width={980}
+          >
+            {activeSymbolDraft ? (
+              <SymbolEditor
+                title={activeSymbolTitle}
+                submitLabel={
+                  activeSymbolId === NEW_SYMBOL_MODAL_ID
+                    ? 'Add Symbol'
+                    : 'Save Settings'
+                }
+                status={activeSymbolStatus}
+                saving={savingKey === activeSymbolId}
+                draft={activeSymbolDraft}
+                onChange={(key, value) => {
+                  if (activeSymbolId === NEW_SYMBOL_MODAL_ID) {
+                    updateNewSymbol(key, value);
+                    return;
+                  }
+
+                  if (!activeSymbolId) {
+                    return;
+                  }
+
+                  updateSymbolDraft(activeSymbolId, key, value);
+                }}
+                onClose={() => setActiveSymbolId(null)}
+                onSubmit={() => {
+                  if (activeSymbolId === NEW_SYMBOL_MODAL_ID) {
+                    void createSymbol();
+                    return;
+                  }
+
+                  void saveExistingSymbol(activeSymbolDraft);
+                }}
+              />
+            ) : null}
+          </Modal>
+        </Card>
       ) : activeTab === 'exchanges' ? (
-        <div
-          aria-labelledby="settings-tab-exchanges"
-          className="stack-lg"
-          id="settings-panel-exchanges"
-          role="tabpanel"
-        >
+        <div className="stack-lg">
           {MANAGED_EXCHANGES.map((exchange) => (
             <ExchangePanel
               account={exchangeAccounts[exchange]}
@@ -1523,35 +1411,20 @@ export function SettingsClient({
           ))}
         </div>
       ) : (
-        <section
-          aria-labelledby="settings-tab-pushes"
-          className="card"
-          id="settings-panel-pushes"
-          role="tabpanel"
-        >
+        <Card className="surface-card" styles={{ body: { padding: 20 } }}>
           <h2>Push Notifications</h2>
           <p className="muted">
             Subscribe this device to receive entry, exit, and runner error
             alerts.
           </p>
           <div className="button-row">
-            <button
-              className="primary-button"
-              onClick={() => void subscribe()}
-              type="button"
-            >
+            <Button onClick={() => void subscribe()} type="primary">
               Subscribe
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => void unsubscribe()}
-              type="button"
-            >
-              Unsubscribe
-            </button>
+            </Button>
+            <Button onClick={() => void unsubscribe()}>Unsubscribe</Button>
           </div>
           <p className="status-line">{status}</p>
-        </section>
+        </Card>
       )}
     </div>
   );

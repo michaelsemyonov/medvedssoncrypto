@@ -1,24 +1,32 @@
 'use client';
 
+import { Button, Card } from 'antd';
+
+import { Eyebrow } from '@/components/ui-primitives.tsx';
+
 export default function ErrorPage({
   error,
-  reset
+  reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
   return (
-    <section className="card" style={{ maxWidth: 680, margin: '0 auto' }}>
-      <div className="eyebrow">PWA Error</div>
+    <Card
+      className="surface-card center-card error-card"
+      styles={{ body: { padding: 24 } }}
+    >
+      <Eyebrow>PWA Error</Eyebrow>
       <h2>Something went wrong while loading the dashboard.</h2>
       <p className="muted">
-        {error.message || 'The page could not be rendered right now. You can retry without reloading the whole app.'}
+        {error.message ||
+          'The page could not be rendered right now. You can retry without reloading the whole app.'}
       </p>
       <div className="button-row">
-        <button className="primary-button" onClick={() => reset()} type="button">
+        <Button onClick={() => reset()} type="primary">
           Try Again
-        </button>
+        </Button>
       </div>
-    </section>
+    </Card>
   );
 }

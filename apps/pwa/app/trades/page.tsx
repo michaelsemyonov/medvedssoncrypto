@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
+import { Alert, Card, Collapse, Descriptions, Empty, Space } from 'antd';
 
 import { ExchangeBadge } from '@/components/exchange-badge.tsx';
 import { fetchApiWithFallback } from '@/lib/api.ts';
 import { formatDateTime } from '@/lib/datetime.ts';
+import { StatusTag } from '@/components/ui-primitives.tsx';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +15,7 @@ type TradeGroup = {
 };
 
 function getTradeOpenedValue(trade: TradeRecord): unknown {
-  return (
-    trade.opening_order_filled_at ?? trade.opened_at ?? trade.entry_time
-  );
+  return trade.opening_order_filled_at ?? trade.opened_at ?? trade.entry_time;
 }
 
 function toTimestamp(value: unknown): number {
@@ -31,10 +31,7 @@ function toTimestamp(value: unknown): number {
   return 0;
 }
 
-function compareTradesDesc(
-  left: TradeRecord,
-  right: TradeRecord
-): number {
+function compareTradesDesc(left: TradeRecord, right: TradeRecord): number {
   const entryTimeDiff =
     toTimestamp(getTradeOpenedValue(right)) -
     toTimestamp(getTradeOpenedValue(left));
@@ -53,11 +50,7 @@ function compareTradesDesc(
   return toTimestamp(right.created_at) - toTimestamp(left.created_at);
 }
 
-function formatSignedNumber(
-  value: unknown,
-  digits = 4,
-  suffix = ''
-): string {
+function formatSignedNumber(value: unknown, digits = 4, suffix = ''): string {
   const number = Number(value ?? 0);
 
   if (!Number.isFinite(number)) {
@@ -140,10 +133,10 @@ function getTradeHeadlineClassName(trade: TradeRecord): string {
   return 'trade-summary-value';
 }
 
-function getTradeSideClassName(trade: TradeRecord): string {
-  return formatPrimitiveValue(trade.side) === 'SHORT'
-    ? 'pill pill-danger trade-summary-side'
-    : 'pill trade-summary-side';
+function getTradeSideClassName(
+  trade: TradeRecord
+): 'success' | 'warning' {
+  return formatPrimitiveValue(trade.side) === 'SHORT' ? 'warning' : 'success';
 }
 
 function renderTradeDetailItems(
@@ -301,64 +294,69 @@ function TradeCard({
   const tradeId = getTradeId(trade);
 
   return (
-    <details
+    <Collapse
       className={nested ? 'trade-row trade-row-nested' : 'trade-row'}
-      role="listitem"
-    >
-      <summary className="trade-summary">
-        <span className="trade-summary-main">
-          <span className="trade-summary-symbol">
-            {formatPrimitiveValue(trade.symbol)}
-          </span>
-          <ExchangeBadge
-            compact
-            exchange={formatPrimitiveValue(trade.broker, 'bybit')}
-          />
-          <span className={getTradeSideClassName(trade)}>
-            {formatPrimitiveValue(trade.side)}
-          </span>
-          {Boolean(trade.is_counter_position) ? (
-            <span className="pill pill-warn">Counter</span>
-          ) : null}
-        </span>
-        <span className="trade-summary-value">
-          <span className="trade-summary-label">Opened</span>
-          <strong>{formatDateTime(getTradeOpenedValue(trade))}</strong>
-        </span>
-        <span className="trade-summary-value">
-          <span className="trade-summary-label">Entry</span>
-          <strong>{formatNumber(trade.entry_price)}</strong>
-        </span>
-        <span className="trade-summary-value">
-          <span className="trade-summary-label">Exit</span>
-          <strong>{formatNumber(trade.exit_price)}</strong>
-        </span>
-        <span className="trade-summary-value">
-          <span className="trade-summary-label">Fees</span>
-          <strong>
-            {formatNumber(
-              Number(trade.entry_fee ?? 0) + Number(trade.exit_fee ?? 0)
-            )}
-          </strong>
-        </span>
-        <span className={getTradeHeadlineClassName(trade)}>
-          <span className="trade-summary-label">PnL</span>
-          <strong>{formatSignedNumber(trade.realized_pnl)}</strong>
-        </span>
-      </summary>
-      <div className="trade-detail-wrap">
-        <table className="data-table trade-detail-table">
-          <tbody>
-            {details.map((item) => (
-              <tr key={`${tradeId}-${item.label}`}>
-                <th scope="row">{item.label}</th>
-                <td>{item.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
+      items={[
+        {
+          key: tradeId,
+          label: (
+            <div className="trade-summary">
+              <span className="trade-summary-main">
+                <span className="trade-summary-symbol">
+                  {formatPrimitiveValue(trade.symbol)}
+                </span>
+                <ExchangeBadge
+                  compact
+                  exchange={formatPrimitiveValue(trade.broker, 'bybit')}
+                />
+                <StatusTag tone={getTradeSideClassName(trade)}>
+                  {formatPrimitiveValue(trade.side)}
+                </StatusTag>
+                {Boolean(trade.is_counter_position) ? (
+                  <StatusTag tone="warning">Counter</StatusTag>
+                ) : null}
+              </span>
+              <span className="trade-summary-value">
+                <span className="trade-summary-label">Opened</span>
+                <strong>{formatDateTime(getTradeOpenedValue(trade))}</strong>
+              </span>
+              <span className="trade-summary-value">
+                <span className="trade-summary-label">Entry</span>
+                <strong>{formatNumber(trade.entry_price)}</strong>
+              </span>
+              <span className="trade-summary-value">
+                <span className="trade-summary-label">Exit</span>
+                <strong>{formatNumber(trade.exit_price)}</strong>
+              </span>
+              <span className="trade-summary-value">
+                <span className="trade-summary-label">Fees</span>
+                <strong>
+                  {formatNumber(
+                    Number(trade.entry_fee ?? 0) + Number(trade.exit_fee ?? 0)
+                  )}
+                </strong>
+              </span>
+              <span className={getTradeHeadlineClassName(trade)}>
+                <span className="trade-summary-label">PnL</span>
+                <strong>{formatSignedNumber(trade.realized_pnl)}</strong>
+              </span>
+            </div>
+          ),
+          children: (
+            <Descriptions
+              bordered
+              className="compact-descriptions"
+              column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
+              items={details.map((item) => ({
+                key: `${tradeId}-${item.label}`,
+                label: item.label,
+                children: item.value,
+              }))}
+            />
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -372,38 +370,44 @@ export default async function TradesPage() {
   const tradeGroups = buildTradeGroups(trades);
 
   return (
-    <section className="card">
+    <Card className="surface-card" styles={{ body: { padding: 20 } }}>
       <h2>Simulated Trades</h2>
       {unavailable ? (
-        <p className="status-line">
-          Trade history is temporarily unavailable while the backend API
-          reconnects.
-        </p>
+        <Alert
+          description="Trade history is temporarily unavailable while the backend API reconnects."
+          showIcon
+          type="warning"
+        />
       ) : null}
       {trades.length === 0 ? (
-        <p className="muted">No trade data is available right now.</p>
+        <Empty
+          description="No trade data is available right now."
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       ) : (
-        <div className="trade-list" role="list">
-          {tradeGroups.map((group) => {
-            return (
-              <div className="trade-stack" key={getTradeId(group.trade)}>
-                <TradeCard trade={group.trade} />
-                {group.counterTrades.length > 0 ? (
-                  <div className="trade-nested-list" role="list">
-                    {group.counterTrades.map((counterTrade) => (
-                      <TradeCard
-                        key={getTradeId(counterTrade)}
-                        nested
-                        trade={counterTrade}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+        <div className="trade-list">
+          {tradeGroups.map((group) => (
+            <div className="trade-stack" key={getTradeId(group.trade)}>
+              <TradeCard trade={group.trade} />
+              {group.counterTrades.length > 0 ? (
+                <Space
+                  className="trade-nested-list"
+                  direction="vertical"
+                  size={10}
+                >
+                  {group.counterTrades.map((counterTrade) => (
+                    <TradeCard
+                      key={getTradeId(counterTrade)}
+                      nested
+                      trade={counterTrade}
+                    />
+                  ))}
+                </Space>
+              ) : null}
+            </div>
+          ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }

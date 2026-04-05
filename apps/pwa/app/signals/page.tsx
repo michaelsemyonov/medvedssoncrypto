@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import { Alert, Button, Card, Descriptions, Empty, Flex } from 'antd';
 
 import { CandleChart } from '@/components/candle-chart.tsx';
 import { fetchApiWithFallback } from '@/lib/api.ts';
 import { formatDateTime } from '@/lib/datetime.ts';
+import { Eyebrow, StatusTag } from '@/components/ui-primitives.tsx';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,90 +85,113 @@ export default async function SignalsPage({
   const nextPageHref = getSignalsPageHref(currentPage + 1);
 
   return (
-    <section className="card">
+    <Card className="surface-card" styles={{ body: { padding: 20 } }}>
       <h2>Recent Signals</h2>
       {unavailable ? (
-        <p className="status-line">
-          Recent signals are temporarily unavailable while the backend API
-          reconnects.
-        </p>
+        <Alert
+          description="Recent signals are temporarily unavailable while the backend API reconnects."
+          showIcon
+          type="warning"
+        />
       ) : null}
       {signals.length === 0 ? (
-        <p className="muted">
-          {currentPage > 1
-            ? 'No signals were found on this page.'
-            : 'No signal data is available right now.'}
-        </p>
+        <Empty
+          description={
+            currentPage > 1
+              ? 'No signals were found on this page.'
+              : 'No signal data is available right now.'
+          }
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       ) : (
         <div className="signal-list">
           {signals.map((signal) => (
-            <article className="signal-card" key={signal.id}>
-              <div className="signal-summary">
-                <div className="signal-head">
-                  <div>
-                    <p className="eyebrow">{signal.signal_type}</p>
-                    <h3 className="signal-symbol">{signal.symbol}</h3>
+            <Card
+              className="surface-card"
+              key={signal.id}
+              styles={{ body: { padding: 18 } }}
+            >
+              <div className="signal-card">
+                <div className="signal-summary">
+                  <div className="signal-head">
+                    <div>
+                      <Eyebrow>{signal.signal_type}</Eyebrow>
+                      <h3 className="signal-symbol">{signal.symbol}</h3>
+                    </div>
+                    <StatusTag
+                      tone={
+                        signal.approved === true
+                          ? 'success'
+                          : getApprovalClassName(signal.approved) === 'pill'
+                            ? 'success'
+                            : 'warning'
+                      }
+                    >
+                      {getApprovalLabel(signal.approved)}
+                    </StatusTag>
                   </div>
-                  <span className={getApprovalClassName(signal.approved)}>
-                    {getApprovalLabel(signal.approved)}
-                  </span>
+                  <Descriptions
+                    className="signal-descriptions"
+                    column={{ lg: 3, md: 2, sm: 1, xs: 1 }}
+                    items={[
+                      {
+                        key: 'time',
+                        label: 'Time',
+                        children: formatDateTime(signal.created_at),
+                      },
+                      {
+                        key: 'reason',
+                        label: 'Reason',
+                        children: signal.rejection_reason ?? signal.reason,
+                      },
+                      {
+                        key: 'formula',
+                        label: 'Formula',
+                        children: `r_t=${formatFormulaValue(signal.formula_inputs.r_t)} / B_t=${formatFormulaValue(signal.formula_inputs.B_t)}`,
+                      },
+                    ]}
+                  />
                 </div>
-                <div className="signal-grid">
-                  <div className="signal-field">
-                    <span className="signal-field-label">Time</span>
-                    <strong>{formatDateTime(signal.created_at)}</strong>
-                  </div>
-                  <div className="signal-field">
-                    <span className="signal-field-label">Reason</span>
-                    <strong>{signal.rejection_reason ?? signal.reason}</strong>
-                  </div>
-                  <div className="signal-field">
-                    <span className="signal-field-label">Formula</span>
-                    <strong>
-                      r_t={formatFormulaValue(signal.formula_inputs.r_t)} / B_t=
-                      {formatFormulaValue(signal.formula_inputs.B_t)}
-                    </strong>
-                  </div>
-                </div>
+                <CandleChart
+                  ariaLabel="Candlestick chart for the latest 60 minutes before the signal"
+                  candles={signal.recent_candles}
+                  emptyMessage="No stored candles are available for this signal yet."
+                  footerLabel="Signal candle highlighted"
+                  highlightLastCandle
+                  summary={`${signal.recent_candles.length}/12 candles`}
+                  title="Latest 60 min"
+                />
               </div>
-              <CandleChart
-                ariaLabel="Candlestick chart for the latest 60 minutes before the signal"
-                candles={signal.recent_candles}
-                emptyMessage="No stored candles are available for this signal yet."
-                footerLabel="Signal candle highlighted"
-                highlightLastCandle
-                summary={`${signal.recent_candles.length}/12 candles`}
-                title="Latest 60 min"
-              />
-            </article>
+            </Card>
           ))}
         </div>
       )}
       {showPagination ? (
-        <nav className="signals-pagination" aria-label="Signals pagination">
+        <Flex
+          align="center"
+          className="signals-pagination"
+          gap={16}
+          justify="space-between"
+        >
           <span className="muted">Page {currentPage}</span>
           <div className="chip-grid">
             {currentPage > 1 ? (
-              <Link className="chip" href={previousPageHref}>
-                Previous
+              <Link href={previousPageHref}>
+                <Button>Previous</Button>
               </Link>
             ) : (
-              <span className="chip chip-disabled" aria-disabled="true">
-                Previous
-              </span>
+              <Button disabled>Previous</Button>
             )}
             {hasNextPage ? (
-              <Link className="chip" href={nextPageHref}>
-                Next
+              <Link href={nextPageHref}>
+                <Button>Next</Button>
               </Link>
             ) : (
-              <span className="chip chip-disabled" aria-disabled="true">
-                Next
-              </span>
+              <Button disabled>Next</Button>
             )}
           </div>
-        </nav>
+        </Flex>
       ) : null}
-    </section>
+    </Card>
   );
 }

@@ -1,5 +1,8 @@
+import { Alert, Card, Col, Empty, Row, Statistic, Table } from 'antd';
+
 import { fetchApiWithFallback } from '@/lib/api.ts';
 import { formatDateTime } from '@/lib/datetime.ts';
+import { Eyebrow, StatusTag } from '@/components/ui-primitives.tsx';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,90 +49,112 @@ export default async function DashboardPage() {
   return (
     <div className="stack-lg">
       {unavailable ? (
-        <section className="card">
-          <div className="eyebrow">Temporary Degradation</div>
-          <p className="status-line">
-            Dashboard data is temporarily unavailable while the backend API
-            reconnects.
-          </p>
-        </section>
+        <Alert
+          description="Dashboard data is temporarily unavailable while the backend API reconnects."
+          message="Temporary Degradation"
+          showIcon
+          type="warning"
+        />
       ) : null}
 
-      <section className="grid">
-        <article className="card">
-          <div className="eyebrow">Today's PnL</div>
-          <div className="metric">
-            {formatSignedPnl(dashboard.todayRealizedPnl)}
-          </div>
-          <p className="muted">
-            Realized PnL for trades closed today.
-          </p>
-        </article>
-        <article className="card">
-          <div className="eyebrow">Counter-Orders PnL</div>
-          <div className="metric">
-            {formatSignedPnl(dashboard.todayCounterOrdersRealizedPnl)}
-          </div>
-          <p className="muted">
-            Realized PnL from counter positions closed today.
-          </p>
-        </article>
-        <article className="card">
-          <div className="eyebrow">Open Dry-Run Positions</div>
-          <div className="metric">{dashboard.openPositionsCount}</div>
-          <p className="muted">
-            Single position per symbol, next-open fill model.
-          </p>
-        </article>
-        <article className="card">
-          <div className="eyebrow">Win Rate</div>
-          <div className="metric">
-            {Number(dashboard.stats.winRate ?? 0).toFixed(1)}%
-          </div>
-          <p className="muted">
-            {dashboard.stats.closedTrades} simulated trades closed today.
-          </p>
-        </article>
-      </section>
+      <Row gutter={[16, 16]}>
+        <Col lg={6} md={12} xs={24}>
+          <Card className="surface-card" styles={{ body: { padding: 20 } }}>
+            <Eyebrow>Today's PnL</Eyebrow>
+            <Statistic
+              value={formatSignedPnl(dashboard.todayRealizedPnl)}
+              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
+            />
+            <p className="muted">Realized PnL for trades closed today.</p>
+          </Card>
+        </Col>
+        <Col lg={6} md={12} xs={24}>
+          <Card className="surface-card" styles={{ body: { padding: 20 } }}>
+            <Eyebrow>Counter-Orders PnL</Eyebrow>
+            <Statistic
+              value={formatSignedPnl(dashboard.todayCounterOrdersRealizedPnl)}
+              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
+            />
+            <p className="muted">
+              Realized PnL from counter positions closed today.
+            </p>
+          </Card>
+        </Col>
+        <Col lg={6} md={12} xs={24}>
+          <Card className="surface-card" styles={{ body: { padding: 20 } }}>
+            <Eyebrow>Open Dry-Run Positions</Eyebrow>
+            <Statistic
+              value={dashboard.openPositionsCount}
+              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
+            />
+            <p className="muted">
+              Single position per symbol, next-open fill model.
+            </p>
+          </Card>
+        </Col>
+        <Col lg={6} md={12} xs={24}>
+          <Card className="surface-card" styles={{ body: { padding: 20 } }}>
+            <Eyebrow>Win Rate</Eyebrow>
+            <Statistic
+              value={`${Number(dashboard.stats.winRate ?? 0).toFixed(1)}%`}
+              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
+            />
+            <p className="muted">
+              {dashboard.stats.closedTrades} simulated trades closed today.
+            </p>
+          </Card>
+        </Col>
+      </Row>
 
-      <section className="card">
+      <Card className="surface-card" styles={{ body: { padding: 20 } }}>
         <h2>Latest Signal Per Symbol</h2>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Symbol</th>
-              <th>Signal</th>
-              <th>Time</th>
-              <th>Approval</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashboard.latestSignals.length === 0 ? (
-              <tr className="table-empty-row">
-                <td colSpan={4} className="muted">
-                  No signal data is available right now.
-                </td>
-              </tr>
-            ) : null}
-            {dashboard.latestSignals.map((item) => (
-              <tr key={item.symbol}>
-                <td data-label="Symbol">{item.symbol}</td>
-                <td data-label="Signal">{item.signal_type}</td>
-                <td data-label="Time">{formatDateTime(item.created_at)}</td>
-                <td data-label="Approval">
-                  <span className={item.approved ? 'pill' : 'pill pill-warn'}>
-                    {item.approved === null
-                      ? 'Pending'
-                      : item.approved
-                        ? 'Approved'
-                        : 'Rejected'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+        <Table
+          columns={[
+            {
+              dataIndex: 'symbol',
+              key: 'symbol',
+              title: 'Symbol',
+            },
+            {
+              dataIndex: 'signal_type',
+              key: 'signal',
+              title: 'Signal',
+            },
+            {
+              dataIndex: 'created_at',
+              key: 'time',
+              title: 'Time',
+              render: (value: string) => formatDateTime(value),
+            },
+            {
+              dataIndex: 'approved',
+              key: 'approval',
+              title: 'Approval',
+              render: (approved: boolean | null) => (
+                <StatusTag tone={approved ? 'success' : 'warning'}>
+                  {approved === null
+                    ? 'Pending'
+                    : approved
+                      ? 'Approved'
+                      : 'Rejected'}
+                </StatusTag>
+              ),
+            },
+          ]}
+          dataSource={dashboard.latestSignals}
+          locale={{
+            emptyText: (
+              <Empty
+                description="No signal data is available right now."
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            ),
+          }}
+          pagination={false}
+          rowKey="symbol"
+          scroll={{ x: 640 }}
+        />
+      </Card>
     </div>
   );
 }
