@@ -1,6 +1,32 @@
-import 'dotenv/config';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { config as loadDotenv } from 'dotenv';
 
 import { buildApp } from './app.ts';
+
+const loadEnvironment = () => {
+  const serverDir = path.dirname(fileURLToPath(import.meta.url));
+  const appDir = path.resolve(serverDir, '..');
+  const repoDir = path.resolve(appDir, '..', '..');
+  const candidates = [
+    process.env.DOTENV_CONFIG_PATH,
+    path.join(appDir, '.env'),
+    path.join(repoDir, '.env'),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      loadDotenv({
+        override: false,
+        path: candidate,
+      });
+    }
+  }
+};
+
+loadEnvironment();
 
 const main = async () => {
   const { app, config, runner } = await buildApp();
@@ -20,7 +46,7 @@ const main = async () => {
 
   await app.listen({
     host: '0.0.0.0',
-    port: config.port
+    port: config.port,
   });
 
   if (config.runnerAutostart) {

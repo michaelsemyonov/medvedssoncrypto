@@ -46,13 +46,36 @@ export default async function DashboardPage() {
     },
   });
 
+  const latestSignals = dashboard.latestSignals.map((item) => ({
+    approval: (
+      <StatusTag
+        tone={
+          item.approved === true
+            ? 'success'
+            : item.approved === false
+              ? 'warning'
+              : 'warning'
+        }
+      >
+        {item.approved === null
+          ? 'Pending'
+          : item.approved
+            ? 'Approved'
+            : 'Rejected'}
+      </StatusTag>
+    ),
+    signal: item.signal_type,
+    symbol: item.symbol,
+    time: formatDateTime(item.created_at),
+  }));
+
   return (
     <div className="stack-lg">
       {unavailable ? (
         <Alert
           description="Dashboard data is temporarily unavailable while the backend API reconnects."
-          message="Temporary Degradation"
           showIcon
+          title="Temporary Degradation"
           type="warning"
         />
       ) : null}
@@ -62,8 +85,8 @@ export default async function DashboardPage() {
           <Card className="surface-card" styles={{ body: { padding: 20 } }}>
             <Eyebrow>Today's PnL</Eyebrow>
             <Statistic
+              styles={{ content: { fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' } }}
               value={formatSignedPnl(dashboard.todayRealizedPnl)}
-              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
             />
             <p className="muted">Realized PnL for trades closed today.</p>
           </Card>
@@ -72,8 +95,8 @@ export default async function DashboardPage() {
           <Card className="surface-card" styles={{ body: { padding: 20 } }}>
             <Eyebrow>Counter-Orders PnL</Eyebrow>
             <Statistic
+              styles={{ content: { fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' } }}
               value={formatSignedPnl(dashboard.todayCounterOrdersRealizedPnl)}
-              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
             />
             <p className="muted">
               Realized PnL from counter positions closed today.
@@ -84,8 +107,8 @@ export default async function DashboardPage() {
           <Card className="surface-card" styles={{ body: { padding: 20 } }}>
             <Eyebrow>Open Dry-Run Positions</Eyebrow>
             <Statistic
+              styles={{ content: { fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' } }}
               value={dashboard.openPositionsCount}
-              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
             />
             <p className="muted">
               Single position per symbol, next-open fill model.
@@ -96,8 +119,8 @@ export default async function DashboardPage() {
           <Card className="surface-card" styles={{ body: { padding: 20 } }}>
             <Eyebrow>Win Rate</Eyebrow>
             <Statistic
+              styles={{ content: { fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' } }}
               value={`${Number(dashboard.stats.winRate ?? 0).toFixed(1)}%`}
-              valueStyle={{ fontSize: 'clamp(1.85rem, 7vw, 2.6rem)' }}
             />
             <p className="muted">
               {dashboard.stats.closedTrades} simulated trades closed today.
@@ -116,32 +139,22 @@ export default async function DashboardPage() {
               title: 'Symbol',
             },
             {
-              dataIndex: 'signal_type',
+              dataIndex: 'signal',
               key: 'signal',
               title: 'Signal',
             },
             {
-              dataIndex: 'created_at',
+              dataIndex: 'time',
               key: 'time',
               title: 'Time',
-              render: (value: string) => formatDateTime(value),
             },
             {
-              dataIndex: 'approved',
+              dataIndex: 'approval',
               key: 'approval',
               title: 'Approval',
-              render: (approved: boolean | null) => (
-                <StatusTag tone={approved ? 'success' : 'warning'}>
-                  {approved === null
-                    ? 'Pending'
-                    : approved
-                      ? 'Approved'
-                      : 'Rejected'}
-                </StatusTag>
-              ),
             },
           ]}
-          dataSource={dashboard.latestSignals}
+          dataSource={latestSignals}
           locale={{
             emptyText: (
               <Empty

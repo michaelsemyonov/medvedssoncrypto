@@ -1,9 +1,9 @@
 import { type NextRequest } from 'next/server';
 
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@medvedsson/shared';
+import { resolveApiBaseUrl } from '@/lib/api-base-url.ts';
 
-const getApiBaseUrl = (): string =>
-  (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const getApiBaseUrl = (): string => resolveApiBaseUrl();
 
 const getSessionSecret = (): string => {
   const secret = process.env.SESSION_SECRET;
@@ -37,10 +37,10 @@ export async function POST(request: NextRequest) {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${token}`
+      authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
-    cache: 'no-store'
+    cache: 'no-store',
   });
 
   const payload = await response.text();
@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
   return new Response(payload, {
     status: response.status,
     headers: {
-      'content-type': response.headers.get('content-type') ?? 'application/json'
-    }
+      'content-type':
+        response.headers.get('content-type') ?? 'application/json',
+    },
   });
 }

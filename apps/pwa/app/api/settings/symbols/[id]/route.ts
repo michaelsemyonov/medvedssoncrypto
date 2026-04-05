@@ -1,13 +1,9 @@
 import { type NextRequest } from 'next/server';
 
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@medvedsson/shared';
+import { resolveApiBaseUrl } from '@/lib/api-base-url.ts';
 
-const getApiBaseUrl = (): string =>
-  (
-    process.env.API_BASE_URL ??
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    'http://localhost:3000'
-  ).replace(/\/$/, '');
+const getApiBaseUrl = (): string => resolveApiBaseUrl();
 
 const getSessionSecret = (): string => {
   const secret = process.env.SESSION_SECRET;

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Alert, Button, Card, Descriptions, Empty, Flex } from 'antd';
+import { Alert, Button, Card, Descriptions, Empty, Flex, Tooltip } from 'antd';
 
 import { CandleChart } from '@/components/candle-chart.tsx';
 import { fetchApiWithFallback } from '@/lib/api.ts';
@@ -147,7 +147,33 @@ export default async function SignalsPage({
                       {
                         key: 'formula',
                         label: 'Formula',
-                        children: `r_t=${formatFormulaValue(signal.formula_inputs.r_t)} / B_t=${formatFormulaValue(signal.formula_inputs.B_t)}`,
+                        children: (
+                          <>
+                            <Tooltip title="Current candle return: (close / previousClose) − 1">
+                              <span
+                                style={{
+                                  textDecoration: 'underline dotted',
+                                  cursor: 'help',
+                                }}
+                              >
+                                r_t=
+                                {formatFormulaValue(signal.formula_inputs.r_t)}
+                              </span>
+                            </Tooltip>
+                            {' / '}
+                            <Tooltip title="Baseline volatility: mean absolute return over the previous N bars">
+                              <span
+                                style={{
+                                  textDecoration: 'underline dotted',
+                                  cursor: 'help',
+                                }}
+                              >
+                                B_t=
+                                {formatFormulaValue(signal.formula_inputs.B_t)}
+                              </span>
+                            </Tooltip>
+                          </>
+                        ),
                       },
                     ]}
                   />

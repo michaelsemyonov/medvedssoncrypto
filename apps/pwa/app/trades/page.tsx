@@ -133,9 +133,7 @@ function getTradeHeadlineClassName(trade: TradeRecord): string {
   return 'trade-summary-value';
 }
 
-function getTradeSideClassName(
-  trade: TradeRecord
-): 'success' | 'warning' {
+function getTradeSideClassName(trade: TradeRecord): 'success' | 'warning' {
   return formatPrimitiveValue(trade.side) === 'SHORT' ? 'warning' : 'success';
 }
 
@@ -392,7 +390,7 @@ export default async function TradesPage() {
               {group.counterTrades.length > 0 ? (
                 <Space
                   className="trade-nested-list"
-                  direction="vertical"
+                  orientation="vertical"
                   size={10}
                 >
                   {group.counterTrades.map((counterTrade) => (

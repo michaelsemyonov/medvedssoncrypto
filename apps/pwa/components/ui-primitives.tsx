@@ -18,8 +18,8 @@ export function Eyebrow({ children }: EyebrowProps) {
 export function StatusTag({ children, tone = 'default' }: StatusTagProps) {
   return (
     <Tag
-      bordered={false}
       className={['status-tag', `status-tag-${tone}`].join(' ')}
+      variant="filled"
     >
       {children}
     </Tag>

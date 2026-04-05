@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "API_BASE_URL=http://127.0.0.1:3000 next dev -p 3001",
     "build": "next build",
     "start": "node scripts/start-standalone.mjs"
   },

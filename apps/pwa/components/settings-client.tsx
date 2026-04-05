@@ -493,7 +493,10 @@ function SymbolEditor({
                   value={draft.strategyVersion}
                 />
               </Form.Item>
-              <Form.Item label="Signal N">
+              <Form.Item
+                label="Signal N"
+                tooltip="Lookback window size (N). Number of bars used to compute the baseline volatility B_t. Default is 96 bars (8 hours on 5m)."
+              >
                 <InputNumber
                   className="full-width-control"
                   min={1}
@@ -501,7 +504,10 @@ function SymbolEditor({
                   value={draft.signalN}
                 />
               </Form.Item>
-              <Form.Item label="Signal K">
+              <Form.Item
+                label="Signal K"
+                tooltip="Threshold multiplier (K). The current return r_t must exceed K × B_t to trigger an entry signal. Higher values require stronger moves."
+              >
                 <InputNumber
                   className="full-width-control"
                   min={0}
@@ -510,7 +516,10 @@ function SymbolEditor({
                   value={draft.signalK}
                 />
               </Form.Item>
-              <Form.Item label="Signal Hold Bars">
+              <Form.Item
+                label="Signal Hold Bars"
+                tooltip="Hold duration (H). Number of bars to hold a position before the time-based exit triggers. Default is 72 bars (6 hours on 5m)."
+              >
                 <InputNumber
                   className="full-width-control"
                   min={1}

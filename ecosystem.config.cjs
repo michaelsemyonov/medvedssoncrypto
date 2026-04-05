@@ -42,8 +42,8 @@ module.exports = {
       interpreter: 'none',
       env: {
         NODE_ENV: 'production',
-        PORT: '3001'
-      }
+        PORT: '3001',
+      },
     },
     {
       name: 'medvedsson-pwa',
@@ -57,9 +57,9 @@ module.exports = {
         ADMIN_PASSWORD: envValues.ADMIN_PASSWORD,
         SESSION_SECRET: envValues.SESSION_SECRET,
         SESSION_TTL_HOURS: envValues.SESSION_TTL_HOURS,
-        API_BASE_URL: envValues.API_BASE_URL,
-        NEXT_PUBLIC_API_BASE_URL: envValues.NEXT_PUBLIC_API_BASE_URL
-      }
-    }
-  ]
+        API_BASE_URL: 'http://127.0.0.1:3001',
+        NEXT_PUBLIC_API_BASE_URL: envValues.NEXT_PUBLIC_API_BASE_URL,
+      },
+    },
+  ],
 };
