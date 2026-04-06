@@ -35,7 +35,7 @@ export const DEFAULT_SYMBOL_SETTINGS: SymbolRuntimeSettings = {
   exchangeRateLimitMs: 300,
   positionBroker: 'bybit',
   counterPositionBroker: 'okx',
-  timeframe: '5m',
+  timeframe: '5m', // '1m' also supported — default remains 5m
   dryRun: true,
   allowShort: true,
   strategyKey: 'momentum_96_5_72',
@@ -44,7 +44,7 @@ export const DEFAULT_SYMBOL_SETTINGS: SymbolRuntimeSettings = {
     n: 96,
     k: 5,
     hBars: 72,
-    timeframe: '5m',
+    timeframe: '5m', // '1m' also supported for signal calculations
   },
   execution: {
     fillModel: 'next_open',

@@ -62,7 +62,7 @@ type ApiSymbol = {
   symbol: string;
   base_asset: string;
   quote_asset: string;
-  timeframe: '5m' | '15m';
+  timeframe: '1m' | '5m' | '15m';
   dry_run: boolean;
   allow_short: boolean;
   strategy_key: string;
@@ -79,7 +79,7 @@ type ApiSymbol = {
   max_open_positions: number;
   cooldown_bars: number;
   stop_loss_pct: number;
-  trailing_profile: TrailingProfile;
+  trailing_profile: 'conservative' | 'balanced' | 'aggressive' | 'custom';
   trailing_enabled: boolean;
   trailing_activation_profit_pct: number;
   trailing_giveback_ratio: number;
@@ -101,7 +101,7 @@ type SymbolDraft = {
   exchangeRateLimitMs: number;
   positionBroker: 'bybit' | 'okx';
   counterPositionBroker: 'bybit' | 'okx';
-  timeframe: '5m' | '15m';
+  timeframe: '1m' | '5m' | '15m';
   dryRun: boolean;
   allowShort: boolean;
   strategyKey: string;
@@ -176,6 +176,7 @@ const BROKER_OPTIONS: Option<SymbolDraft['positionBroker']>[] = [
 ];
 
 const TIMEFRAME_OPTIONS: Option<SymbolDraft['timeframe']>[] = [
+  { label: '1m', value: '1m' },
   { label: '5m', value: '5m' },
   { label: '15m', value: '15m' },
 ];

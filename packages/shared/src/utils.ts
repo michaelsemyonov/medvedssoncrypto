@@ -103,6 +103,10 @@ const zonedDateTimeToUtcMs = (
 };
 
 export const timeframeToMs = (timeframe: Timeframe): number => {
+  if (timeframe === '1m') {
+    return 1 * 60 * 1000;
+  }
+
   if (timeframe === '5m') {
     return 5 * 60 * 1000;
   }

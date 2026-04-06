@@ -63,7 +63,7 @@ const symbolSettingsSchema = z.object({
   exchangeRateLimitMs: z.coerce.number().int().min(0),
   positionBroker: brokerSchema,
   counterPositionBroker: brokerSchema,
-  timeframe: z.enum(['5m', '15m']),
+  timeframe: z.enum(['1m', '5m', '15m']),
   dryRun: z.boolean(),
   allowShort: z.boolean(),
   strategyKey: z.string().min(1),
@@ -291,7 +291,9 @@ export const buildApp = async () => {
       !account.has_api_key ||
       !account.has_api_secret
     ) {
-      throw new Error(`${exchange.toUpperCase()} credentials are not configured.`);
+      throw new Error(
+        `${exchange.toUpperCase()} credentials are not configured.`
+      );
     }
 
     const credentials = {
@@ -326,7 +328,9 @@ export const buildApp = async () => {
     await client.validate();
     const importedPositions = await client.listOpenPositions();
     const activeRun = await db.getActiveRun();
-    const appPositions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
+    const appPositions = activeRun
+      ? await db.getOpenPositions(activeRun.id)
+      : [];
     const appPositionMap = new Map<string, string>();
 
     for (const position of appPositions) {
@@ -388,7 +392,9 @@ export const buildApp = async () => {
     >
   > => {
     const activeRun = await db.getActiveRun();
-    const appPositions = activeRun ? await db.getOpenPositions(activeRun.id) : [];
+    const appPositions = activeRun
+      ? await db.getOpenPositions(activeRun.id)
+      : [];
     const exchangePositions = await db.listOpenExchangePositions();
 
     const unified = [
@@ -443,7 +449,9 @@ export const buildApp = async () => {
       })),
     ];
 
-    return unified.sort((left, right) => left.symbol.localeCompare(right.symbol));
+    return unified.sort((left, right) =>
+      left.symbol.localeCompare(right.symbol)
+    );
   };
   const notifications = new NotificationService(config, db, logger, () => {
     notificationFailuresCounter.inc();
@@ -615,65 +623,71 @@ export const buildApp = async () => {
     }
   });
 
-  app.post('/exchange-accounts/:exchange/apply-stop-losses', async (request) => {
-    const params = parseOrReply(exchangeParamsSchema, request.params);
+  app.post(
+    '/exchange-accounts/:exchange/apply-stop-losses',
+    async (request) => {
+      const params = parseOrReply(exchangeParamsSchema, request.params);
 
-    try {
-      const { client } = await getExchangeCredentials(params.exchange);
-      const validatedAt = new Date().toISOString();
-      await client.validate();
+      try {
+        const { client } = await getExchangeCredentials(params.exchange);
+        const validatedAt = new Date().toISOString();
+        await client.validate();
 
-      const synced = await syncManagedExchangePositions(params.exchange);
-      const symbols = await db.listSymbols();
-      const symbolSettings = new Map(
-        symbols.map((symbol) => [symbol.symbol, symbol])
-      );
-      let updatedCount = 0;
+        const synced = await syncManagedExchangePositions(params.exchange);
+        const symbols = await db.listSymbols();
+        const symbolSettings = new Map(
+          symbols.map((symbol) => [symbol.symbol, symbol])
+        );
+        let updatedCount = 0;
 
-      for (const position of synced.positions) {
-        const symbol = symbolSettings.get(position.symbol);
+        for (const position of synced.positions) {
+          const symbol = symbolSettings.get(position.symbol);
 
-        if (!symbol || symbol.position_broker !== params.exchange) {
-          continue;
+          if (!symbol || symbol.position_broker !== params.exchange) {
+            continue;
+          }
+
+          if (symbol.stop_loss_pct <= 0) {
+            continue;
+          }
+
+          const stopLossPrice =
+            position.side === 'LONG'
+              ? round(position.entryPrice * (1 - symbol.stop_loss_pct / 100), 8)
+              : round(
+                  position.entryPrice * (1 + symbol.stop_loss_pct / 100),
+                  8
+                );
+
+          await client.applyStopLoss(position, stopLossPrice);
+          updatedCount += 1;
         }
 
-        if (symbol.stop_loss_pct <= 0) {
-          continue;
-        }
+        const refreshed = await syncManagedExchangePositions(params.exchange);
+        await db.updateExchangeAccountSyncStatus({
+          exchange: params.exchange,
+          validatedAt,
+          syncedAt: refreshed.syncedAt,
+          syncError: null,
+        });
 
-        const stopLossPrice =
-          position.side === 'LONG'
-            ? round(position.entryPrice * (1 - symbol.stop_loss_pct / 100), 8)
-            : round(position.entryPrice * (1 + symbol.stop_loss_pct / 100), 8);
-
-        await client.applyStopLoss(position, stopLossPrice);
-        updatedCount += 1;
+        return {
+          validatedAt,
+          syncedAt: refreshed.syncedAt,
+          summary: refreshed.summary,
+          updated: updatedCount,
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Stop-loss update failed.';
+        await db.updateExchangeAccountSyncStatus({
+          exchange: params.exchange,
+          syncError: message,
+        });
+        throw error;
       }
-
-      const refreshed = await syncManagedExchangePositions(params.exchange);
-      await db.updateExchangeAccountSyncStatus({
-        exchange: params.exchange,
-        validatedAt,
-        syncedAt: refreshed.syncedAt,
-        syncError: null,
-      });
-
-      return {
-        validatedAt,
-        syncedAt: refreshed.syncedAt,
-        summary: refreshed.summary,
-        updated: updatedCount,
-      };
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Stop-loss update failed.';
-      await db.updateExchangeAccountSyncStatus({
-        exchange: params.exchange,
-        syncError: message,
-      });
-      throw error;
     }
-  });
+  );
 
   app.get('/signals/recent', async (request) => {
     const query = parseOrReply(paginationQuerySchema, request.query);
@@ -811,7 +825,9 @@ export const buildApp = async () => {
     const params = parseOrReply(symbolIdParamsSchema, request.params);
     const run = await db.getActiveRun();
     const appPosition = run
-      ? (await db.getOpenPositions(run.id)).find((item) => item.id === params.id)
+      ? (await db.getOpenPositions(run.id)).find(
+          (item) => item.id === params.id
+        )
       : null;
     const exchangePosition = appPosition
       ? null
@@ -827,12 +843,12 @@ export const buildApp = async () => {
     const symbol =
       appPosition && appPosition.symbol_id
         ? await db.getSymbolById(appPosition.symbol_id)
-        : (await db.listSymbols()).find(
+        : ((await db.listSymbols()).find(
             (item) =>
               item.symbol === trackedSymbol &&
               (item.position_broker === exchangePosition?.exchange ||
                 item.exchange === exchangePosition?.exchange)
-          ) ?? null;
+          ) ?? null);
 
     try {
       return {

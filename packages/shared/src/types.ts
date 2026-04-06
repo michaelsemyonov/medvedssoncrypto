@@ -60,7 +60,7 @@ export const BROKERS = {
 
 export type BrokerName = (typeof BROKERS)[keyof typeof BROKERS];
 
-export type Timeframe = '5m' | '15m';
+export type Timeframe = '1m' | '5m' | '15m';
 
 export type Candle = {
   exchange: string;
